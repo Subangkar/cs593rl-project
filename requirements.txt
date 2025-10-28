@@ -1,0 +1,13 @@
+transformers>=4.42
+sentencepiece
+timm
+ftfy
+safetensors
+pillow
+torch
+torchvision
+accelerate
+tqdm
+pandas
+requests
+bitsandbytes
