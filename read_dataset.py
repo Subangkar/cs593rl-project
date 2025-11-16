@@ -8,7 +8,7 @@ class DatasetProcessor:
 
     def __init__(self, file_path: str):
         self.file_path = file_path
-        self.df = self.read_dataset(file_path)
+        self.df = self.read_dataset()
 
     def read_dataset(self) -> pd.DataFrame:
         """
