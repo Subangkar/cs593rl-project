@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import torch
 import numpy as np
 from copy import deepcopy
@@ -7,7 +7,6 @@ from typing import Any, Callable, List, Optional, Sequence, Type, Union
 
 from stable_baselines3.common.vec_env import VecEnvWrapper
 from stable_baselines3.common.vec_env.util import (
-    copy_obs_dict,
     dict_to_obs,
     obs_space_info,
 )
@@ -18,6 +17,13 @@ from stable_baselines3.common.vec_env.base_vec_env import (
     VecEnvStepReturn,
 )
 from stable_baselines3.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
+
+# Helper function to replace removed copy_obs_dict
+def copy_obs_dict(obs):
+    """Copy observation dictionary"""
+    if isinstance(obs, dict):
+        return {k: deepcopy(v) for k, v in obs.items()}
+    return deepcopy(obs)
 
 from RL_env import MutatorSelect
 from a2c_ppo_acktr.utils import *

@@ -25,7 +25,10 @@ def create_model_and_tok(args, model_path, target=False):
         MODEL = model_path
         TOK = None
     else:
-        raise NotImplementedError
+        # For Ollama or other API-based models, return model name with None tokenizer
+        # This signals that we should use API calls instead of local model inference
+        MODEL = model_path if model_path else "deepseek-r1:14b"
+        TOK = None
 
     return MODEL, TOK
 
