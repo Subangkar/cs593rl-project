@@ -3,7 +3,7 @@ import os
 import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForVision2Seq
-from prompt_gen import gen_query, QueryType  # do NOT modify prompt_gen.py
+from figstep.prompt_gen import gen_query, QueryType  # do NOT modify prompt_gen.py
 
 # ---- Config via env (optional) ----
 MODEL_ID = os.environ.get("LLAVA_MODEL_ID", "llava-hf/llava-1.5-7b-hf")

@@ -5,7 +5,7 @@ from transformers import (
 )
 from transformers import LlavaForConditionalGeneration  # for LLaVA specifically
 
-from prompt_gen import QueryType, gen_query
+from .prompt_gen import QueryType, gen_query
 
 
 class LLMModel:

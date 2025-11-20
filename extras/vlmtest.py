@@ -7,7 +7,7 @@ from transformers import (
 )
 from transformers import LlavaForConditionalGeneration  # for LLaVA specifically
 
-from prompt_gen import QueryType, gen_query
+from figstep.prompt_gen import QueryType, gen_query
 from ollama_api import ollama_generate_api, ollama_chat_api
 from reward_utils import check_with_unaligned, llm_as_judge_reward_score, embedder_qwen_3_8b, embedder_bge, embedder_gemma, embedder_all_mini_lm_l6_v2
 
