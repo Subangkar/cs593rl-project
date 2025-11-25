@@ -128,7 +128,7 @@ def main():
     
     obs_size = 1024
     envs = make_vec_envs(args, args.num_processes, obs_size, args.cuda_id, eval=True)         
-    actor_critic = torch.load(args.ckpt_path, map_location=device)[0]
+    actor_critic = torch.load(args.ckpt_path, map_location=device, weights_only=False)[0]
  
     obs = envs.reset()
 

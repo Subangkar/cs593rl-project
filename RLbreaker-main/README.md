@@ -50,12 +50,12 @@ In this example, we select `meta-llama/Meta-Llama-3-8B-Instruct` as the target L
 After training the agent, we test it on unseen questions. 
 
 ```bash
-python test_policy.py \
+CUDA_VISIBLE_DEVICES=2,3 python test_policy.py \
 --index=0 \
 --target_model=meta-llama/Meta-Llama-3-8B-Instruct \
 --model_path=gpt-3.5-turbo \
 --ckpt_path=trained_models/ppo/llama3_8bbest.pt \
---max_query=10000
+--max_query=10000 \
 --K=1000
 --openai_key=[OPENAI_KEY] \
 --deepinfra_key=[DEEPINFRA_KEY] \

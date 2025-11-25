@@ -4,7 +4,7 @@ from typing import Optional
 
 from sentence_transformers import SentenceTransformer
 
-from prompt_gen import gen_query, QueryType
+from figstep.prompt_gen import gen_query, QueryType
 from reward_utils import check_with_unaligned
 
 
