@@ -51,7 +51,7 @@ def main():
     # Model parameters
     parser.add_argument('--target-model', type=str, default='llama3.1:8b',
                         help='target model to attack')
-    parser.add_argument('--mutator-model', type=str, default='deepseek-r1:14b',
+    parser.add_argument('--mutator-model', type=str, default='gemma3:latest',
                         help='model for generating mutations')
     parser.add_argument('--judge-model', type=str, default='deepseek-r1:14b',
                         help='model for judging responses')

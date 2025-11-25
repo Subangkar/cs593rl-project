@@ -124,14 +124,33 @@ def mutate_query(query, mutation_prompt, mutator_model, temperature=0.7, max_tok
         return query
 
 
-def query_target_model(query, target_model, temperature=0.0, max_tokens=512):
-    """Query the target model using Ollama"""
+def query_target_model(query, target_model, temperature=0.0, max_tokens=512, image_path=None):
+    """
+    Query the target model using Ollama.
+    
+    Args:
+        query: Text query
+        target_model: Target model name
+        temperature: Model temperature
+        max_tokens: Max tokens to generate
+        image_path: Optional path to image for VLM (vision language model)
+        
+    Returns:
+        Model response text
+    """
     try:
+        message = {
+            "role": "user",
+            "content": query
+        }
+        
+        # Add image if provided (for vision language models)
+        if image_path:
+            message["images"] = [image_path]
+        
         result = ollama.chat(
             model=target_model,
-            messages=[
-                {"role": "user", "content": query}
-            ],
+            messages=[message],
             options={
                 "temperature": temperature,
                 "num_predict": max_tokens,
