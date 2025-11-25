@@ -13,29 +13,21 @@ from llm_utils.model_inference import LLM_response
 from utils import *
 
 
-def remove_prompt(text):
-    prompt = "[INSERT PROMPT HERE]"
-    stripped_text = text.strip()
-    if stripped_text.startswith(prompt):
-        # Remove the prompt and any leading whitespace after the prompt
-        return text[len(prompt):].lstrip()
-    return text   
-   
-def preprocess_templates(templates):
-    processed_t = []
-    begin_marker = "====Template begins===="
-    end_marker = "====Template ends===="
+def preprocess_queries(queries):
+    """Clean up queries by removing mutation artifacts."""
+    processed_q = []
+    begin_marker = "====Query begins===="
+    end_marker = "====Query ends===="
 
-    for text in templates:
+    for text in queries:
         if begin_marker in text:
             text = text.replace(begin_marker, "").replace(end_marker, "")
         if text.startswith("Sure") or text.startswith(" Of course") \
             or text.startswith(" Sure") or text.startswith(" Of course!"):
             colon_index = text.find(":")
             if colon_index != -1:
-                new_text = text[colon_index + 1:].strip()  # strip to remove any leading whitespace
+                new_text = text[colon_index + 1:].strip()
             else:
-                # not find
                 new_text = text
         elif text.startswith(" I apologize"):
             newline_index = text.find("\n")
@@ -43,21 +35,12 @@ def preprocess_templates(templates):
                 new_text = text[newline_index + 1:].strip()
             else:
                 new_text = text
-            
         else:
             new_text = text
         assert type(new_text) is str
-        new_text = remove_prompt(new_text)
-        processed_t.append(new_text)
-    assert len(processed_t) == len(templates)
-    return processed_t
-
-def replace_template(test_question, prompt):
-    if '[INSERT PROMPT HERE]' in prompt:
-        jailbreak_input = prompt.replace('[INSERT PROMPT HERE]', test_question)
-        return jailbreak_input
-    else:
-        return False
+        processed_q.append(new_text)
+    assert len(processed_q) == len(queries)
+    return processed_q
     
 def execute_query(args, mutant, MODEL, TOK):
     if 'gpt' in args.model_path:
@@ -96,7 +79,6 @@ def main():
     parser.add_argument('--index', type=int, default=10, help='task id')
     parser.add_argument('--ckpt_path', type=str, default=None, help='path to trained policy')
     parser.add_argument('--defense', type=str, default="none", help='defense method')
-    parser.add_argument('--K', type=int, default=200, help='top k templates from training')
     parser.add_argument('--source_model', type=str, default=None)
     add_model_args(parser)
     args = parser.parse_args()
@@ -110,21 +92,8 @@ def main():
     
     print('Experiment arguments ', args, flush=True)
 
-    training_templates_path = f"datasets/prompts_generated/RL_{args.target_model.split('/')[-1]}_{args.index}.csv"
-    df = pd.read_csv(training_templates_path)
-    templates = df['template'].tolist()
-    if 'processed_templates' not in df.columns:
-        processed_t = preprocess_templates(templates)
-        df['processed_templates'] = processed_t
-        df.to_csv(training_templates_path, index=False)
-    try:
-        sorted_df = df.sort_values(by='success_q', ascending=False)
-    except:
-        sorted_df = df
-    sorted_templates = sorted_df['processed_templates']
-    args.template_path = f"datasets/prompts_generated/RL_{args.target_model.split('/')[-1]}_{args.index}_processed.csv"
-    sorted_templates.to_csv(args.template_path, index=False)
-        
+    # No need to load training queries - agent will mutate test questions directly
+    # The trained RL policy will decide which mutations to apply
     
     obs_size = 1024
     envs = make_vec_envs(args, args.num_processes, obs_size, args.cuda_id, eval=True)         

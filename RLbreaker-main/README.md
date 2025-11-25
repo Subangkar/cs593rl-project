@@ -34,13 +34,23 @@ The datasets for the harmful question and initial human-written templates are av
 To train the RL agent, run:
 
 ```bash
-python train_policy.py \
+CUDA_VISIBLE_DEVICES=2,3 python train_policy.py \
 --index=0 \
 --env-name=llama3_8b \
 --target_model=meta-llama/Meta-Llama-3-8B-Instruct \
 --model_path=gpt-3.5-turbo \
 --openai_key=[OPENAI_KEY] \
 --deepinfra_key=[DEEPINFRA_KEY] \
+
+CUDA_VISIBLE_DEVICES=2,3 python train_policy.py \
+--index=0 \
+--env-name=llama3_8b \
+--target_model=meta-llama/Meta-Llama-3-8B-Instruct \
+--max_query 10000 \
+--use_llm_judge \
+--judge_model deepseek-r1:14b
+
+--model_path=meta-llama/Llama-2-7b-chat-hf \
 ```
 
 In this example, we select `meta-llama/Meta-Llama-3-8B-Instruct` as the target LLM and train the RL agent, the helper LLM is `gpt-3.5-turbo`. The agent will be saved at `trained_models/ppo/{ENV_NAME}`. The generated templates will be saved at `datasets/prompts_generated`.

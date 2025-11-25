@@ -27,6 +27,8 @@ def main():
     parser.add_argument('--cuda_id',type=int, default=0)
     parser.add_argument('--index', type=int, default=10, help='task id')
     parser.add_argument('--defense', type=str, default="none", help='defense method')
+    parser.add_argument('--use_llm_judge', action='store_true', help='Use LLM-as-a-judge for reward instead of embedding similarity')
+    parser.add_argument('--judge_model', type=str, default='deepseek-r1:14b', help='Judge model for LLM-as-a-judge evaluation')
     add_model_args(parser)
     utils.add_train_args(parser)
     args = parser.parse_args()
