@@ -121,6 +121,26 @@ Results are saved to `test_results.json` with:
 4. **Add Justification**: Include plausible reason for request
 5. **Make Indirect**: Make query more subtle and indirect
 
+## Recommended Models
+
+### Mutator Models (for generating mutations)
+- **qwen2.5:7b** - Fast, reliable, good mutation quality
+- **llama3.1:8b** - Balanced performance
+- **deepseek-r1:14b** - High quality but slower (may filter harmful content)
+- **gemma2:9b** - Good alternative
+
+**Note:** Some safety-aligned models (like deepseek-r1) may refuse to mutate harmful queries, resulting in empty mutations. Use uncensored or less filtered models if you encounter this.
+
+### Target Models (models to attack)
+- **llama3.1:8b** - Good baseline target
+- **qwen2.5:7b** - Alternative target
+- Any Ollama-compatible model
+
+### Judge Models (for LLM-based reward)
+- **deepseek-r1:14b** - Good reasoning for safety evaluation
+- **llama3.1:8b** - Faster alternative
+- **qwen2.5:7b** - Balanced option
+
 ## Reward Mechanisms
 
 ### Keyword-based (Fast)
@@ -201,16 +221,32 @@ Mutation Usage:
 - Ensure Ollama server is running: `ollama serve`
 - Pull required models: `ollama pull <model>`
 
+**"Warning: Could not parse JSON from mutation response" or "Empty mutation"**
+- The mutator model is returning empty or invalid mutations
+- **Solutions:**
+  1. Use a different mutator model: `--mutator-model qwen2.5:7b` or `--mutator-model llama3.1:8b`
+  2. The model might be filtering harmful content - try uncensored models
+  3. Increase max_tokens in `ollama_utils.py` (default is now 512)
+  4. System will automatically fall back to original query when this happens
+
 **"CUDA out of memory"**
 - Reduce `--num-processes`
 - Use `--no-cuda` to train on CPU
+- Reduce `--batch-size` (see BATCH_SIZE_CONTROL.md)
 
 **Low success rate**
 - Train longer (`--num-env-steps 50000`)
 - Try `--use-llm-judge` for better reward signal
 - Check if target model is too robust
+- Verify mutator model is generating valid mutations (check training logs)
 
 **Policy not learning**
 - Increase learning rate (`--lr 5e-4`)
 - Reduce entropy coefficient (`--entropy-coef 0.005`)
 - Use more parallel environments (`--num-processes 8`)
+
+**Training very slow**
+- Enable batching: `--use-batching` (enabled by default)
+- Increase batch size: `--batch-size 16` (see BATCH_SIZE_CONTROL.md)
+- Use faster mutator model: `--mutator-model qwen2.5:3b`
+- Don't use `--use-llm-judge` during initial training (use keyword-based reward)

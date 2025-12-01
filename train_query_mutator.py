@@ -16,7 +16,7 @@ from datetime import datetime
 from ppo_algorithm import PPO
 from policy_network import Policy
 from rollout_storage import RolloutStorage
-from rl_query_mutator_env import QueryMutationEnv
+from rl_query_mutator_env import QueryMutationEnv, BatchedQueryMutationEnv
 
 
 def main():
@@ -49,7 +49,7 @@ def main():
                         help='max norm of gradients (default: 0.5)')
     
     # Model parameters
-    parser.add_argument('--target-model', type=str, default='llama3.1:8b',
+    parser.add_argument('--target-model', type=str, default='llava:latest',
                         help='target model to attack')
     parser.add_argument('--mutator-model', type=str, default='gemma3:latest',
                         help='model for generating mutations')
@@ -61,6 +61,10 @@ def main():
     # Reward mechanism
     parser.add_argument('--use-llm-judge', action='store_true',
                         help='use LLM judge for reward (slower but more accurate)')
+    
+    # Pregenerated responses
+    parser.add_argument('--unaligned-csv', type=str, default='dataset/unaligned_responses.csv',
+                        help='CSV file with pregenerated unaligned responses')
     
     # Checkpoint
     parser.add_argument('--save-dir', type=str, default='./trained_models_query_mutator',
@@ -75,6 +79,14 @@ def main():
                         help='disable CUDA training')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed')
+    
+    # Batching
+    parser.add_argument('--use-batching', action='store_true', default=True,
+                        help='use batched operations for faster training (default: True)')
+    parser.add_argument('--no-batching', action='store_false', dest='use_batching',
+                        help='disable batched operations')
+    parser.add_argument('--batch-size', type=int, default=8,
+                        help='number of concurrent API calls in batched operations (default: 8)')
     
     args = parser.parse_args()
     
@@ -106,6 +118,9 @@ def main():
     print(f"Judge Model: {args.judge_model}")
     print(f"Uncensored Model: {args.uncensored_model}")
     print(f"Use LLM Judge: {args.use_llm_judge}")
+    print(f"Use Batching: {args.use_batching}")
+    if args.use_batching:
+        print(f"Batch Size: {args.batch_size} concurrent API calls")
     print(f"Device: {device}")
     print(f"Save Directory: {args.save_dir}")
     print("="*60)
@@ -159,12 +174,24 @@ def main():
         env = QueryMutationEnv(args, obs_size, eval=False)
         envs.append(env)
     
-    # Initialize environments
-    obs = []
-    for env in envs:
-        obs.append(env.reset())
-    obs = torch.FloatTensor(np.array(obs)).to(device)
+    # Wrap environments in batched wrapper if batching is enabled
+    if args.use_batching:
+        batched_env = BatchedQueryMutationEnv(envs, batch_size=args.batch_size)
+        print("Batched operations enabled for faster training")
+    else:
+        batched_env = None
+        print("Batched operations disabled")
     
+    # Initialize environments
+    if args.use_batching:
+        obs = batched_env.batch_reset()
+    else:
+        obs = []
+        for env in envs:
+            obs.append(env.reset())
+        obs = np.array(obs)
+    
+    obs = torch.FloatTensor(obs).to(device)
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
     
@@ -202,46 +229,63 @@ def main():
                 )
             
             # Execute actions in all environments
-            obs_list = []
-            reward_list = []
-            done_list = []
-            info_list = []
+            action_indices = action.cpu().numpy()
+            from rl_query_mutator_env import QueryMutator
             
-            for i, env in enumerate(envs):
-                action_idx = action[i].item()
-                obs, reward, done, info = env.step(action_idx)
+            if args.use_batching:
+                # Use batched operations for faster processing
+                obs_batch, reward_batch, done_batch, info_batch = batched_env.batch_step(action_indices)
+            else:
+                # Sequential processing (original behavior)
+                obs_batch = []
+                reward_batch = []
+                done_batch = []
+                info_batch = []
                 
-                # Log to CSV
-                from rl_query_mutator_env import QueryMutator
+                for i, env in enumerate(envs):
+                    action_idx = action_indices[i]
+                    obs, reward, done, info = env.step(action_idx)
+                    
+                    if done:
+                        obs = env.reset()
+                    
+                    obs_batch.append(obs)
+                    reward_batch.append(reward)
+                    done_batch.append(done)
+                    info_batch.append(info)
+                
+                obs_batch = np.array(obs_batch)
+                reward_batch = np.array(reward_batch)
+            
+            # Log to CSV and handle episode resets
+            for i, (obs_i, reward_i, done_i, info_i) in enumerate(zip(obs_batch, reward_batch, done_batch, info_batch)):
+                action_idx = action_indices[i]
                 mutation_name = QueryMutator(action_idx).name
                 csv_writer.writerow([
                     total_steps + i,
                     update,
                     episode_count,
-                    info.get('original_query', '')[:100],  # Truncate for readability
+                    info_i.get('original_query', '')[:100],  # Truncate for readability
                     mutation_name,
-                    info.get('mutated_query', '')[:100],
-                    info.get('target_response', '')[:100],
-                    info.get('unaligned_response', '')[:100] if 'unaligned_response' in info else '',
-                    reward,
-                    env.steps
+                    info_i.get('mutated_query', '')[:100],
+                    info_i.get('target_response', '')[:100],
+                    info_i.get('unaligned_response', '')[:100] if 'unaligned_response' in info_i else '',
+                    reward_i,
+                    envs[i].steps
                 ])
                 
-                if done:
-                    obs = env.reset()
-                    episode_rewards.append(info.get('reward', 0))
-                    episode_lengths.append(env.steps)
+                if done_i:
+                    episode_rewards.append(info_i.get('reward', 0))
+                    episode_lengths.append(envs[i].steps)
                     episode_count += 1
-                
-                obs_list.append(obs)
-                reward_list.append(reward)
-                done_list.append(done)
-                info_list.append(info)
+                    # Reset the environment if using batching (already done in sequential mode)
+                    if args.use_batching:
+                        obs_batch[i] = envs[i].reset()
             
             # Convert to tensors
-            obs = torch.FloatTensor(np.array(obs_list)).to(device)
-            rewards = torch.FloatTensor(reward_list).unsqueeze(1).to(device)
-            masks = torch.FloatTensor([[0.0] if done else [1.0] for done in done_list]).to(device)
+            obs = torch.FloatTensor(obs_batch).to(device)
+            rewards = torch.FloatTensor(reward_batch).unsqueeze(1).to(device)
+            masks = torch.FloatTensor([[0.0] if done else [1.0] for done in done_batch]).to(device)
             
             # Store in rollout buffer
             rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, rewards, masks)
