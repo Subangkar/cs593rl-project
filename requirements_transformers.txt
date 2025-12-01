@@ -1,0 +1,8 @@
+# Additional requirements for non-quantized LLaVA
+# Add these to your existing requirements.txt or install separately
+
+torch>=2.0.0
+transformers>=4.37.0
+accelerate>=0.20.0
+# For better performance on NVIDIA GPUs
+# bitsandbytes>=0.41.0  # Uncomment if you want 8-bit support (still better than 4-bit)
