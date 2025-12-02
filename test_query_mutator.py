@@ -11,9 +11,10 @@ import pandas as pd
 import json
 from pathlib import Path
 
-# Import standalone PPO implementation
-from policy_network import Policy
-from rl_query_mutator_env import QueryMutationEnv, QueryMutator
+# Import RL core components
+from rl_core import Policy
+from rl_query_mutator_env import QueryMutationEnv
+from query_mutation_prompts import QueryMutator
 
 
 def main():

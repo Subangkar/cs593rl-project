@@ -1,113 +1,77 @@
 """
 Ollama Utilities for Query Mutation RL Environment
-Handles model management, API calls, and response generation
+DEPRECATED: Use ollama_client.OllamaClient instead
+This file provides backward compatibility wrappers
 """
 
-import ollama
-import time
-import re
+import warnings
+from ollama_client import OllamaClient
+
+# Show deprecation warning on import
+warnings.warn(
+    "ollama_utils is deprecated. Use OllamaClient from ollama_client instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
+# Create a global client instance for backward compatibility
+_global_client = OllamaClient()
 
 
 def check_and_pull_models(target_model, mutator_model, judge_model=None, 
                           uncensored_model=None, use_llm_judge=False, eval_mode=False):
-    """Check if required Ollama models are available, pull if missing"""
-    try:
-        # Check if ollama is running
-        available_models = ollama.list()
-        
-        # Handle different response formats
-        if isinstance(available_models, dict):
-            models_list = available_models.get('models', [])
-        else:
-            models_list = available_models
-        
-        # Extract model names from the list
-        model_names = []
-        for m in models_list:
-            if isinstance(m, dict):
-                # Try different possible keys
-                name = m.get('name') or m.get('model') or m.get('id', '')
-                model_names.append(name)
-            else:
-                model_names.append(str(m))
-        
-        required_models = [target_model, mutator_model, 'nomic-embed-text']
-        if eval_mode or use_llm_judge:
-            if judge_model:
-                required_models.append(judge_model)
-            if uncensored_model:
-                required_models.append(uncensored_model)
-        
-        missing_models = []
-        for model_name in required_models:
-            if not any(model_name in m for m in model_names):
-                missing_models.append(model_name)
-        
-        if missing_models:
-            print("\n" + "="*60)
-            print("Missing Ollama models detected. Pulling them now...")
-            print("="*60)
-            
-            for model in missing_models:
-                print(f"\nPulling {model}...")
-                try:
-                    ollama.pull(model)
-                    print(f"✓ Successfully pulled {model}")
-                except Exception as e:
-                    print(f"✗ Failed to pull {model}: {e}")
-                    print(f"  Please manually run: ollama pull {model}")
-            
-            print("\n" + "="*60)
-            print("Model pulling complete!")
-            print("="*60 + "\n")
-    except Exception as e:
-        print(f"\nWARNING: Could not check Ollama models: {e}")
-        print("Make sure Ollama is running: ollama serve\n")
+    """DEPRECATED: Use OllamaClient.check_and_pull_models instead"""
+    return _global_client.check_and_pull_models(
+        target_model, mutator_model, judge_model, 
+        uncensored_model, use_llm_judge, eval_mode
+    )
 
 
 def encode_query(query, obs_size, model='nomic-embed-text'):
-    """Encode query to embedding vector using Ollama"""
-    try:
-        import numpy as np
-        
-        # Use Ollama embedding model
-        response = ollama.embeddings(
-            model=model,
-            prompt=query
-        )
-        embedding = np.array(response['embedding'], dtype=np.float32)
-        
-        # Pad or truncate to observation size
-        if len(embedding) < obs_size:
-            embedding = np.pad(embedding, (0, obs_size - len(embedding)))
-        else:
-            embedding = embedding[:obs_size]
-        
-        return embedding
-    except Exception as e:
-        import numpy as np
-        if 'not found' in str(e).lower():
-            print(f"\nERROR: Embedding model not found. Please run: ollama pull {model}")
-        else:
-            print(f"Encoding error: {e}")
-        # Return zero vector as fallback
-        return np.zeros(obs_size, dtype=np.float32)
+    """DEPRECATED: Use OllamaClient.encode_query instead"""
+    return _global_client.encode_query(query, obs_size)
 
 
 def batch_encode_queries(queries, obs_size, model='nomic-embed-text'):
-    """Encode multiple queries to embedding vectors using Ollama"""
-    import numpy as np
-    
-    embeddings = []
-    for query in queries:
-        embeddings.append(encode_query(query, obs_size, model))
-    
-    return np.array(embeddings, dtype=np.float32)
+    """DEPRECATED: Use OllamaClient.batch_encode_queries instead"""
+    return _global_client.batch_encode_queries(queries, obs_size)
 
 
 def mutate_query(query, mutation_prompt, mutator_model, temperature=0.7, max_tokens=512):
+    """DEPRECATED: Use OllamaClient.mutate_query instead"""
+    return _global_client.mutate_query(query, mutation_prompt, mutator_model, temperature, max_tokens)
+
+
+def batch_mutate_queries(queries, mutation_prompts, mutator_model, temperature=0.7, max_tokens=512, batch_size=8):
+    """DEPRECATED: Use OllamaClient.batch_mutate_queries instead"""
+    return _global_client.batch_mutate_queries(queries, mutation_prompts, mutator_model, temperature, max_tokens, batch_size)
+
+
+def query_target_model(query, target_model, temperature=0.0, max_tokens=512, image_path=None):
+    """DEPRECATED: Use OllamaClient.query_target_model instead"""
+    return _global_client.query_target_model(query, target_model, temperature, max_tokens, image_path)
+
+
+def batch_query_target_model(queries, target_model, temperature=0.0, max_tokens=512, image_paths=None, batch_size=8):
+    """DEPRECATED: Use OllamaClient.batch_query_target_model instead"""
+    return _global_client.batch_query_target_model(queries, target_model, temperature, max_tokens, image_paths, batch_size)
+
+
+def generate_unaligned_response(query, uncensored_model, cache=None):
+    """DEPRECATED: Use OllamaClient.generate_unaligned_response instead"""
+    return _global_client.generate_unaligned_response(query, uncensored_model, cache)
+
+
+def llm_judge_score(query, response, unaligned_response, judge_model, temperature=0.0):
+    """DEPRECATED: Use OllamaClient.llm_judge_score instead"""
+    return _global_client.llm_judge_score(query, response, unaligned_response, judge_model, temperature)
+
+
+# Old implementation kept below for reference (not used)
+def _old_mutate_query(query, mutation_prompt, mutator_model, temperature=0.7, max_tokens=512):
     """Apply mutation to query using Ollama with JSON output format"""
     import json
+    import ollama
     try:
         result = ollama.chat(
             model=mutator_model,

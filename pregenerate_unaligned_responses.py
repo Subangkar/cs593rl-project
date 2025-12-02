@@ -7,33 +7,19 @@ import csv
 import os
 import argparse
 from tqdm import tqdm
-from ollama_utils import check_and_pull_models, query_target_model
-
-def load_queries(csv_path):
-    """Load queries from CSV file."""
-    queries = []
-    
-    try:
-        # Try pandas first
-        import pandas as pd
-        df = pd.read_csv(csv_path, header=None)
-        queries = df[0].tolist()
-    except Exception as e:
-        print(f"Pandas failed ({e}), using fallback text reading...")
-        # Fallback to raw text reading
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            queries = [line.strip() for line in f if line.strip()]
-    
-    print(f"Loaded {len(queries)} queries from {csv_path}")
-    return queries
+from ollama_client import OllamaClient
+from dataset_loader import DatasetLoader
 
 def pregenerate_responses(queries, uncensored_model, output_csv):
     """Generate unaligned responses for all queries and save to CSV."""
     
+    # Initialize Ollama client
+    ollama_client = OllamaClient()
+    
     # Check if models are available
     print("Checking Ollama models...")
     # Use a simple check - the uncensored model is all we need for pregeneration
-    check_and_pull_models(
+    ollama_client.check_and_pull_models(
         target_model=uncensored_model,  # Just need the uncensored model
         mutator_model=uncensored_model,  # Dummy value
         judge_model=None,
@@ -54,7 +40,7 @@ def pregenerate_responses(queries, uncensored_model, output_csv):
         for query in tqdm(queries, desc="Generating responses"):
             try:
                 # Generate unaligned response
-                response = query_target_model(query, uncensored_model)
+                response = ollama_client.query_target_model(query, uncensored_model)
                 
                 # Write to CSV (csv.writer handles multiline fields automatically)
                 writer.writerow([query, response])
@@ -78,8 +64,10 @@ def main():
     
     args = parser.parse_args()
     
-    # Load queries
-    queries = load_queries(args.input_csv)
+    # Load queries using DatasetLoader
+    dataset_loader = DatasetLoader()
+    queries = dataset_loader.load_queries(args.input_csv)
+    print(f"Loaded {len(queries)} queries from {args.input_csv}")
     
     # Generate and save responses
     pregenerate_responses(queries, args.uncensored_model, args.output_csv)

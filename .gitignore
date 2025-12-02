@@ -9,3 +9,4 @@ __pycache__/
 venv/
 
 trained_models_query_mutator/
+*.pt

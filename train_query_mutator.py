@@ -14,10 +14,8 @@ from tqdm import tqdm
 import csv
 from datetime import datetime
 
-# Import standalone PPO implementation
-from ppo_algorithm import PPO
-from policy_network import Policy
-from rollout_storage import RolloutStorage
+# Import RL core components
+from rl_core import PPO, Policy, RolloutStorage
 from rl_query_mutator_env import QueryMutationEnv, BatchedQueryMutationEnv
 
 
