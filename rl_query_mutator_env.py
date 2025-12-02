@@ -86,19 +86,73 @@ class QueryMutationEnv(gym.Env):
         else:
             self.queries_pool = self.queries_pool[:800]  # Train set
         
-        # Load pregenerated unaligned responses if available
+        # Randomly sample a fraction of queries if specified
+        frac_samples = getattr(args, 'frac_samples', 1.0)
+        sampled_indices = None  # Track which indices were sampled
+        
+        if frac_samples < 1.0 and frac_samples > 0.0:
+            original_size = len(self.queries_pool)
+            sample_size = int(original_size * frac_samples)
+            sample_size = max(1, sample_size)  # Ensure at least 1 query
+            
+            # Sample with indices to maintain mapping to pregenerated responses
+            all_indices = list(range(len(self.queries_pool)))
+            sampled_indices = random.sample(all_indices, sample_size)
+            self.queries_pool = [self.queries_pool[i] for i in sampled_indices]
+            print(f"Randomly sampled {sample_size}/{original_size} queries ({frac_samples*100:.1f}%)")
+        elif frac_samples <= 0.0 or frac_samples > 1.0:
+            print(f"Warning: frac_samples={frac_samples} invalid, using all data (1.0)")
+        
+        # Load pregenerated unaligned responses (same sequence as dataset)
         self.pregenerated_responses = {}
         unaligned_csv = getattr(args, 'unaligned_csv', 'dataset/unaligned_responses.csv')
         if os.path.exists(unaligned_csv):
             print(f"Loading pregenerated unaligned responses from {unaligned_csv}...")
-            with open(unaligned_csv, 'r', encoding='utf-8') as f:
-                reader = csv.reader(f)
-                next(reader)  # Skip header
-                for row in reader:
-                    if len(row) >= 2:
-                        query, response = row[0], row[1]
-                        self.pregenerated_responses[query] = response
-            print(f"Loaded {len(self.pregenerated_responses)} pregenerated responses")
+            try:
+                # Load responses in same order as queries
+                responses_list = []
+                with open(unaligned_csv, 'r', encoding='utf-8') as f:
+                    reader = csv.reader(f)
+                    next(reader)  # Skip header
+                    for row in reader:
+                        if len(row) >= 2:
+                            responses_list.append(row[1])  # Store response only
+                        else:
+                            responses_list.append('')  # Empty response for malformed rows
+                
+                # Adjust for train/test split offset
+                if eval:
+                    offset = 800  # Test set starts at index 800
+                else:
+                    offset = 0  # Train set starts at index 0
+                
+                # Map sampled queries to their responses using indices
+                if sampled_indices is not None:
+                    # Use sampled indices
+                    for local_idx, original_idx in enumerate(sampled_indices):
+                        global_idx = original_idx + offset
+                        if global_idx < len(responses_list):
+                            query = self.queries_pool[local_idx]
+                            self.pregenerated_responses[query] = responses_list[global_idx]
+                else:
+                    # Use all queries in range
+                    for local_idx, query in enumerate(self.queries_pool):
+                        global_idx = local_idx + offset
+                        if global_idx < len(responses_list):
+                            self.pregenerated_responses[query] = responses_list[global_idx]
+                
+                matched = len(self.pregenerated_responses)
+                total_queries = len(self.queries_pool)
+                print(f"Loaded {len(responses_list)} total pregenerated responses")
+                if matched > 0:
+                    print(f"Mapped {matched}/{total_queries} queries to pregenerated responses ({matched/total_queries*100:.1f}%)")
+                else:
+                    print(f"Warning: No pregenerated responses mapped")
+                    print("Will generate unaligned responses on-the-fly (slower)")
+                    
+            except Exception as e:
+                print(f"Error loading pregenerated responses: {e}")
+                print("Will generate unaligned responses on-the-fly (slower)")
         else:
             print(f"Warning: No pregenerated responses found at {unaligned_csv}")
             print("Will generate unaligned responses on-the-fly (slower)")

@@ -39,6 +39,10 @@ def main():
     parser.add_argument('--use-llm-judge', action='store_true',
                         help='use LLM judge for evaluation')
     
+    # Dataset sampling
+    parser.add_argument('--frac-samples', type=float, default=1.0,
+                        help='fraction of dataset to randomly sample (0.0-1.0, default: 1.0 = all data)')
+    
     # Output
     parser.add_argument('--output-file', type=str, default='query_mutator_test_results.json',
                         help='output file for test results')
