@@ -4,6 +4,8 @@ Simplified version of RLbreaker's train_policy.py
 """
 
 import os
+import sys
+import signal
 import torch
 import argparse
 import numpy as np
@@ -16,7 +18,7 @@ from datetime import datetime
 from ppo_algorithm import PPO
 from policy_network import Policy
 from rollout_storage import RolloutStorage
-from rl_query_mutator_env import QueryMutationEnv
+from rl_query_mutator_env import QueryMutationEnv, BatchedQueryMutationEnv
 
 
 def main():
@@ -49,7 +51,7 @@ def main():
                         help='max norm of gradients (default: 0.5)')
     
     # Model parameters
-    parser.add_argument('--target-model', type=str, default='llama3.1:8b',
+    parser.add_argument('--target-model', type=str, default='llava:latest',
                         help='target model to attack')
     parser.add_argument('--mutator-model', type=str, default='gemma3:latest',
                         help='model for generating mutations')
@@ -61,6 +63,14 @@ def main():
     # Reward mechanism
     parser.add_argument('--use-llm-judge', action='store_true',
                         help='use LLM judge for reward (slower but more accurate)')
+    
+    # Pregenerated responses
+    parser.add_argument('--unaligned-csv', type=str, default='dataset/unaligned_responses.csv',
+                        help='CSV file with pregenerated unaligned responses')
+    
+    # Dataset sampling
+    parser.add_argument('--frac-samples', type=float, default=1.0,
+                        help='fraction of dataset to randomly sample (0.0-1.0, default: 1.0 = all data)')
     
     # Checkpoint
     parser.add_argument('--save-dir', type=str, default='./trained_models_query_mutator',
@@ -75,6 +85,14 @@ def main():
                         help='disable CUDA training')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed')
+    
+    # Batching
+    parser.add_argument('--use-batching', action='store_true', default=True,
+                        help='use batched operations for faster training (default: True)')
+    parser.add_argument('--no-batching', action='store_false', dest='use_batching',
+                        help='disable batched operations')
+    parser.add_argument('--batch-size', type=int, default=8,
+                        help='number of concurrent API calls in batched operations (default: 8)')
     
     args = parser.parse_args()
     
@@ -106,6 +124,9 @@ def main():
     print(f"Judge Model: {args.judge_model}")
     print(f"Uncensored Model: {args.uncensored_model}")
     print(f"Use LLM Judge: {args.use_llm_judge}")
+    print(f"Use Batching: {args.use_batching}")
+    if args.use_batching:
+        print(f"Batch Size: {args.batch_size} concurrent API calls")
     print(f"Device: {device}")
     print(f"Save Directory: {args.save_dir}")
     print("="*60)
@@ -159,12 +180,24 @@ def main():
         env = QueryMutationEnv(args, obs_size, eval=False)
         envs.append(env)
     
-    # Initialize environments
-    obs = []
-    for env in envs:
-        obs.append(env.reset())
-    obs = torch.FloatTensor(np.array(obs)).to(device)
+    # Wrap environments in batched wrapper if batching is enabled
+    if args.use_batching:
+        batched_env = BatchedQueryMutationEnv(envs, batch_size=args.batch_size)
+        print("Batched operations enabled for faster training")
+    else:
+        batched_env = None
+        print("Batched operations disabled")
     
+    # Initialize environments
+    if args.use_batching:
+        obs = batched_env.batch_reset()
+    else:
+        obs = []
+        for env in envs:
+            obs.append(env.reset())
+        obs = np.array(obs)
+    
+    obs = torch.FloatTensor(obs).to(device)
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
     
@@ -192,133 +225,160 @@ def main():
     # Create progress bar
     pbar = tqdm(total=args.num_env_steps, desc="Training", unit="steps")
     
-    for update in range(num_updates):
-        # Collect rollouts
-        for step in range(args.num_steps):
-            with torch.no_grad():
-                value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    rollouts.obs[step], rollouts.recurrent_hidden_states[step],
-                    rollouts.masks[step]
-                )
-            
-            # Execute actions in all environments
-            obs_list = []
-            reward_list = []
-            done_list = []
-            info_list = []
-            
-            for i, env in enumerate(envs):
-                action_idx = action[i].item()
-                obs, reward, done, info = env.step(action_idx)
+    try:
+        for update in range(num_updates):
+            # Collect rollouts
+            for step in range(args.num_steps):
+                with torch.no_grad():
+                    value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                        rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                        rollouts.masks[step]
+                    )
                 
-                # Log to CSV
+                # Execute actions in all environments
+                action_indices = action.cpu().numpy()
                 from rl_query_mutator_env import QueryMutator
-                mutation_name = QueryMutator(action_idx).name
-                csv_writer.writerow([
-                    total_steps + i,
-                    update,
-                    episode_count,
-                    info.get('original_query', '')[:100],  # Truncate for readability
-                    mutation_name,
-                    info.get('mutated_query', '')[:100],
-                    info.get('target_response', '')[:100],
-                    info.get('unaligned_response', '')[:100] if 'unaligned_response' in info else '',
-                    reward,
-                    env.steps
-                ])
                 
-                if done:
-                    obs = env.reset()
-                    episode_rewards.append(info.get('reward', 0))
-                    episode_lengths.append(env.steps)
-                    episode_count += 1
+                if args.use_batching:
+                    # Use batched operations for faster processing
+                    obs_batch, reward_batch, done_batch, info_batch = batched_env.batch_step(action_indices)
+                else:
+                    # Sequential processing (original behavior)
+                    obs_batch = []
+                    reward_batch = []
+                    done_batch = []
+                    info_batch = []
+                    
+                    for i, env in enumerate(envs):
+                        action_idx = action_indices[i]
+                        obs, reward, done, info = env.step(action_idx)
+                        
+                        if done:
+                            obs = env.reset()
+                        
+                        obs_batch.append(obs)
+                        reward_batch.append(reward)
+                        done_batch.append(done)
+                        info_batch.append(info)
+                    
+                    obs_batch = np.array(obs_batch)
+                    reward_batch = np.array(reward_batch)
                 
-                obs_list.append(obs)
-                reward_list.append(reward)
-                done_list.append(done)
-                info_list.append(info)
+                # Log to CSV and handle episode resets
+                for i, (obs_i, reward_i, done_i, info_i) in enumerate(zip(obs_batch, reward_batch, done_batch, info_batch)):
+                    action_idx = action_indices[i]
+                    mutation_name = QueryMutator(action_idx).name
+                    csv_writer.writerow([
+                        total_steps + i,
+                        update,
+                        episode_count,
+                        info_i.get('original_query', '')[:100],  # Truncate for readability
+                        mutation_name,
+                        info_i.get('mutated_query', '')[:100],
+                        info_i.get('target_response', '')[:100],
+                        info_i.get('unaligned_response', '')[:100] if 'unaligned_response' in info_i else '',
+                        reward_i,
+                        envs[i].steps
+                    ])
+                    
+                    if done_i:
+                        episode_rewards.append(info_i.get('reward', 0))
+                        episode_lengths.append(envs[i].steps)
+                        episode_count += 1
+                        # Reset the environment if using batching (already done in sequential mode)
+                        if args.use_batching:
+                            obs_batch[i] = envs[i].reset()
+                
+                # Convert to tensors
+                obs = torch.FloatTensor(obs_batch).to(device)
+                rewards = torch.FloatTensor(reward_batch).unsqueeze(1).to(device)
+                masks = torch.FloatTensor([[0.0] if done else [1.0] for done in done_batch]).to(device)
+                
+                # Store in rollout buffer
+                rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, rewards, masks)
+                
+                total_steps += args.num_processes
+                pbar.update(args.num_processes)
             
-            # Convert to tensors
-            obs = torch.FloatTensor(np.array(obs_list)).to(device)
-            rewards = torch.FloatTensor(reward_list).unsqueeze(1).to(device)
-            masks = torch.FloatTensor([[0.0] if done else [1.0] for done in done_list]).to(device)
+            # Compute returns
+            with torch.no_grad():
+                next_value = actor_critic.get_value(
+                    rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
+                    rollouts.masks[-1]
+                ).detach()
             
-            # Store in rollout buffer
-            rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, rewards, masks)
+            rollouts.compute_returns(next_value, args.gamma, 0.95, use_gae=True)
             
-            total_steps += args.num_processes
-            pbar.update(args.num_processes)
-        
-        # Compute returns
-        with torch.no_grad():
-            next_value = actor_critic.get_value(
-                rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
-                rollouts.masks[-1]
-            ).detach()
-        
-        rollouts.compute_returns(next_value, args.gamma, 0.95, use_gae=True)
-        
-        # Update policy
-        value_loss, action_loss, dist_entropy = agent.update(rollouts)
-        
-        rollouts.after_update()
-        
-        # Logging
-        if update % args.log_interval == 0:
-            avg_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0.0
-            avg_length = np.mean(episode_lengths[-100:]) if episode_lengths else 0.0
-            success_rate = envs[0].successful_attacks / max(1, envs[0].total_queries)
+            # Update policy
+            value_loss, action_loss, dist_entropy = agent.update(rollouts)
             
-            # Update progress bar with metrics
-            pbar.set_postfix({
-                'update': f'{update}/{num_updates}',
-                'reward': f'{avg_reward:.3f}',
-                'success': f'{success_rate:.1%}',
-                'v_loss': f'{value_loss:.3f}',
-                'a_loss': f'{action_loss:.3f}'
-            })
+            rollouts.after_update()
             
-            # Detailed logging
-            tqdm.write(f"\nUpdate {update}/{num_updates} | Steps {total_steps}/{args.num_env_steps}")
-            tqdm.write(f"  Avg Reward: {avg_reward:.4f}")
-            tqdm.write(f"  Avg Episode Length: {avg_length:.2f}")
-            tqdm.write(f"  Success Rate: {success_rate:.2%}")
-            tqdm.write(f"  Value Loss: {value_loss:.4f}")
-            tqdm.write(f"  Action Loss: {action_loss:.4f}")
-            tqdm.write(f"  Entropy: {dist_entropy:.4f}")
-        
-        # Save checkpoint
-        if update % args.save_interval == 0 and update > 0:
-            save_path = os.path.join(args.save_dir, f'checkpoint_{update}.pt')
-            torch.save({
-                'update': update,
-                'model_state_dict': actor_critic.state_dict(),
-                'optimizer_state_dict': agent.optimizer.state_dict(),
-                'avg_reward': np.mean(episode_rewards[-100:]) if episode_rewards else 0.0,
-            }, save_path)
-            tqdm.write(f"Saved checkpoint to {save_path}")
+            # Logging
+            if update % args.log_interval == 0:
+                avg_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0.0
+                avg_length = np.mean(episode_lengths[-100:]) if episode_lengths else 0.0
+                success_rate = envs[0].successful_attacks / max(1, envs[0].total_queries)
+                
+                # Update progress bar with metrics
+                pbar.set_postfix({
+                    'update': f'{update}/{num_updates}',
+                    'reward': f'{avg_reward:.3f}',
+                    'success': f'{success_rate:.1%}',
+                    'v_loss': f'{value_loss:.3f}',
+                    'a_loss': f'{action_loss:.3f}'
+                })
+                
+                # Detailed logging
+                tqdm.write(f"\nUpdate {update}/{num_updates} | Steps {total_steps}/{args.num_env_steps}")
+                tqdm.write(f"  Avg Reward: {avg_reward:.4f}")
+                tqdm.write(f"  Avg Episode Length: {avg_length:.2f}")
+                tqdm.write(f"  Success Rate: {success_rate:.2%}")
+                tqdm.write(f"  Value Loss: {value_loss:.4f}")
+                tqdm.write(f"  Action Loss: {action_loss:.4f}")
+                tqdm.write(f"  Entropy: {dist_entropy:.4f}")
+            
+            # Save checkpoint
+            if update % args.save_interval == 0 and update > 0:
+                save_path = os.path.join(args.save_dir, f'checkpoint_{update}.pt')
+                torch.save({
+                    'update': update,
+                    'model_state_dict': actor_critic.state_dict(),
+                    'optimizer_state_dict': agent.optimizer.state_dict(),
+                    'avg_reward': np.mean(episode_rewards[-100:]) if episode_rewards else 0.0,
+                }, save_path)
+                tqdm.write(f"Saved checkpoint to {save_path}")
     
-    # Close progress bar
-    pbar.close()
+    except KeyboardInterrupt:
+        print("\n\n" + "="*60)
+        print("Training interrupted by user (Ctrl+C)")
+        print(f"Completed {total_steps} steps before interruption")
+        print("="*60)
     
-    # Close CSV file
-    csv_file.close()
-    
-    # Save final model
-    final_path = os.path.join(args.save_dir, 'final_model.pt')
-    torch.save({
-        'model_state_dict': actor_critic.state_dict(),
-        'avg_reward': np.mean(episode_rewards[-100:]) if episode_rewards else 0.0,
-        'total_steps': total_steps,
-    }, final_path)
-    
-    print("\n" + "="*60)
-    print("Training Complete!")
-    print(f"Final model saved to {final_path}")
-    print(f"Training log saved to {csv_path}")
-    print(f"Total Steps: {total_steps}")
-    print(f"Final Success Rate: {envs[0].successful_attacks / max(1, envs[0].total_queries):.2%}")
-    print("="*60)
+    finally:
+        # Close progress bar
+        if pbar:
+            pbar.close()
+        
+        # Close CSV file
+        if csv_file and not csv_file.closed:
+            csv_file.close()
+        
+        # Save final model
+        final_path = os.path.join(args.save_dir, 'final_model.pt')
+        torch.save({
+            'model_state_dict': actor_critic.state_dict(),
+            'avg_reward': np.mean(episode_rewards[-100:]) if episode_rewards else 0.0,
+            'total_steps': total_steps,
+        }, final_path)
+        
+        print("\n" + "="*60)
+        print("Training Complete!")
+        print(f"Final model saved to {final_path}")
+        print(f"Training log saved to {csv_path}")
+        print(f"Total Steps: {total_steps}")
+        print(f"Final Success Rate: {envs[0].successful_attacks / max(1, envs[0].total_queries):.2%}")
+        print("="*60)
 
 
 if __name__ == '__main__':

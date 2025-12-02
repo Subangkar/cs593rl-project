@@ -94,27 +94,80 @@ def encode_query(query, obs_size, model='nomic-embed-text'):
         return np.zeros(obs_size, dtype=np.float32)
 
 
-def mutate_query(query, mutation_prompt, mutator_model, temperature=0.7, max_tokens=256):
-    """Apply mutation to query using Ollama"""
+def batch_encode_queries(queries, obs_size, model='nomic-embed-text'):
+    """Encode multiple queries to embedding vectors using Ollama"""
+    import numpy as np
+    
+    embeddings = []
+    for query in queries:
+        embeddings.append(encode_query(query, obs_size, model))
+    
+    return np.array(embeddings, dtype=np.float32)
+
+
+def mutate_query(query, mutation_prompt, mutator_model, temperature=0.7, max_tokens=512):
+    """Apply mutation to query using Ollama with JSON output format"""
+    import json
     try:
         result = ollama.chat(
             model=mutator_model,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that rewrites queries."},
-                {"role": "user", "content": mutation_prompt}
+                {"role": "system", "content": "You are a helpful assistant that rewrites queries. Always respond with valid JSON containing a non-empty mutated_query field."},
+                {"role": "user", "content": mutation_prompt + "\n\nRespond with valid JSON: {\"mutated_query\": \"<your complete rewritten query here>\"}\n\nMake sure the mutated_query field is NOT empty."}
             ],
             options={
                 "temperature": temperature,
                 "num_predict": max_tokens,
-            }
+            },
+            format="json"  # Force JSON output
         )
-        mutated = result['message']['content'].strip()
+        response_text = result['message']['content'].strip()
         
-        # Ensure we got a valid mutation
-        if len(mutated) < 10:
-            return query
+        # Try to parse JSON response
+        try:
+            # First try direct JSON parsing
+            json_data = json.loads(response_text)
+            mutated = json_data.get('mutated_query', '').strip()
+            
+            # Check if mutation is valid (non-empty and reasonable length)
+            if mutated and len(mutated) >= 10:
+                return mutated
+            elif mutated:
+                # Got a mutation but it's too short, still use it but warn
+                print(f"Warning: Short mutation ({len(mutated)} chars), using original query")
+                return query
+            else:
+                # Empty mutation - model refused or failed
+                print(f"Warning: Empty mutation from model, using original query")
+                return query
+                
+        except json.JSONDecodeError:
+            # If JSON parsing fails, try to extract from markdown code blocks
+            import re
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    json_data = json.loads(json_match.group(1))
+                    mutated = json_data.get('mutated_query', '').strip()
+                    if mutated and len(mutated) >= 10:
+                        return mutated
+                except json.JSONDecodeError:
+                    pass
+            
+            # Try to find any JSON object in the response
+            json_match = re.search(r'\{[^{}]*"mutated_query"[^{}]*\}', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    json_data = json.loads(json_match.group(0))
+                    mutated = json_data.get('mutated_query', '').strip()
+                    if mutated and len(mutated) >= 10:
+                        return mutated
+                except json.JSONDecodeError:
+                    pass
         
-        return mutated
+        # If all parsing fails, return original query
+        print(f"Warning: Could not parse valid mutation from response: {response_text[:150]}")
+        return query
         
     except Exception as e:
         if 'not found' in str(e).lower():
@@ -122,6 +175,33 @@ def mutate_query(query, mutation_prompt, mutator_model, temperature=0.7, max_tok
         else:
             print(f"Mutation error: {e}")
         return query
+
+
+def batch_mutate_queries(queries, mutation_prompts, mutator_model, temperature=0.7, max_tokens=512, batch_size=8):
+    """Apply mutation to multiple queries using concurrent processing"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import json
+    
+    def mutate_single(query, prompt):
+        return mutate_query(query, prompt, mutator_model, temperature, max_tokens)
+    
+    results = []
+    with ThreadPoolExecutor(max_workers=batch_size) as executor:
+        futures = {executor.submit(mutate_single, q, p): i for i, (q, p) in enumerate(zip(queries, mutation_prompts))}
+        
+        # Maintain order
+        ordered_results = [None] * len(queries)
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                ordered_results[idx] = future.result()
+            except Exception as e:
+                print(f"Batch mutation error for query {idx}: {e}")
+                ordered_results[idx] = queries[idx]  # fallback to original
+        
+        results = ordered_results
+    
+    return results
 
 
 def query_target_model(query, target_model, temperature=0.0, max_tokens=512, image_path=None):
@@ -163,6 +243,35 @@ def query_target_model(query, target_model, temperature=0.0, max_tokens=512, ima
         else:
             print(f"Target model error: {e}")
         return "I cannot help with that request."
+
+
+def batch_query_target_model(queries, target_model, temperature=0.0, max_tokens=512, image_paths=None, batch_size=8):
+    """Query target model with multiple prompts using concurrent processing"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    if image_paths is None:
+        image_paths = [None] * len(queries)
+    
+    def query_single(query, image_path):
+        return query_target_model(query, target_model, temperature, max_tokens, image_path)
+    
+    results = []
+    with ThreadPoolExecutor(max_workers=batch_size) as executor:
+        futures = {executor.submit(query_single, q, img): i for i, (q, img) in enumerate(zip(queries, image_paths))}
+        
+        # Maintain order
+        ordered_results = [None] * len(queries)
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                ordered_results[idx] = future.result()
+            except Exception as e:
+                print(f"Batch query error for query {idx}: {e}")
+                ordered_results[idx] = "I cannot help with that request."
+        
+        results = ordered_results
+    
+    return results
 
 
 def generate_unaligned_response(query, uncensored_model, cache=None):

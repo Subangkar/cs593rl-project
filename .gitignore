@@ -7,3 +7,5 @@ __pycache__/
 *.pyd
 *.swp
 venv/
+
+trained_models_query_mutator/
