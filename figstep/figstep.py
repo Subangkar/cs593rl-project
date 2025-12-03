@@ -109,19 +109,20 @@ class VLMModelTransformers:
         try:
             self.processor = LlavaProcessor.from_pretrained(MODEL_ID, use_fast=True)
             
-            # Load model with explicit GPU settings
+            # Load model with explicit GPU settings and buffer offloading
             if self.device == "cuda":
                 try:
-                    # Try with device_map="auto" first
+                    # Try with device_map="auto" first with buffer offloading
                     self.model = LlavaForConditionalGeneration.from_pretrained(
                         MODEL_ID,
                         torch_dtype=torch.float16,
                         device_map="auto",
+                        offload_buffers=True,  # Fix for buffer allocation warning
                         load_in_8bit=False,
                         load_in_4bit=False,
                         trust_remote_code=True
                     )
-                    print("[info] Model loaded with device_map='auto'")
+                    print("[info] Model loaded with device_map='auto' and buffer offloading")
                 except Exception as e:
                     print(f"[warning] device_map='auto' failed: {e}")
                     print("[info] Trying manual GPU placement...")

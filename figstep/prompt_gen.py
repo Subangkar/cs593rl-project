@@ -6,10 +6,13 @@ import os
 from io import BytesIO
 import pandas as pd
 import textwrap
+import platform
 
-import pyglet
-pyglet.font.add_file('FreeMonoBold.ttf')
-# Now you can use the font name "FreeMonoBold" in your application
+# Import and use pyglet only on Windows
+if platform.system() == "Windows":
+    import pyglet
+    pyglet.font.add_file('FreeMonoBold.ttf')
+    # Now you can use the font name "FreeMonoBold" in your application
 
 def load_image(image_file):
     if image_file.startswith("http") or image_file.startswith("https"):
