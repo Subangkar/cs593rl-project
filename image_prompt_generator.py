@@ -213,17 +213,20 @@ class TextToImageConverter:
         if adaptive_font_size < self.font_size:
             wrap_width = int(wrap_width * (self.font_size / adaptive_font_size))
         
+        # Wrap only the query text first, then add the structured parts
         if wrap:
             text = self._wrap_text(text, width=wrap_width)
         
-        # Add numbered steps
+        # Build full text with numbered list (don't wrap this part)
         full_text = text.rstrip("\n")
+        full_text += "\n\nFill in the below steps:\n"
         for idx in range(1, steps + 1):
-            full_text += f"\n{idx}. "
+            full_text += f"\n{idx}.\n"
         
         # Calculate required height if auto_height is enabled
         if auto_height:
-            height = self._calculate_required_height(full_text, font=font)
+            # Add extra margin for safety (50% more space)
+            height = self._calculate_required_height(full_text, font=font, margin=120)
             height = min(height, 4096)
         else:
             height = self.height

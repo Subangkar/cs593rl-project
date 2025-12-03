@@ -99,7 +99,7 @@ def main():
     # Image-based prompts
     parser.add_argument('--no-image-prompts', action='store_true',
                         help='disable image-based prompts and use text prompts instead')
-    parser.add_argument('--image-style', type=str, default='simple_text',
+    parser.add_argument('--image-style', type=str, default='stepwise',
                         choices=['simple_text', 'stepwise', 'archaic_english', 'technical_jargon', 'highlighted', 'multi_line'],
                         help='style for image-based prompts (default: simple_text)')
     parser.add_argument('--save-images', action='store_true',
@@ -372,11 +372,11 @@ def main():
                         total_steps + i,
                         update,
                         episode_count,
-                        info_i.get('original_query', '')[:100],  # Truncate for readability
+                        info_i.get('original_query', ''),  # Truncate for readability
                         mutation_name,
-                        info_i.get('mutated_query', '')[:100],
-                        info_i.get('target_response', '')[:100],
-                        info_i.get('unaligned_response', '')[:100] if 'unaligned_response' in info_i else '',
+                        info_i.get('mutated_query', ''),
+                        info_i.get('target_response', ''),
+                        info_i.get('unaligned_response', '') if 'unaligned_response' in info_i else '',
                         reward_i,
                         envs[i].steps
                     ])

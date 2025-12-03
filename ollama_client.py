@@ -117,7 +117,7 @@ class OllamaClient:
             result = ollama.chat(
                 model=mutator_model,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that rewrites queries. Always respond with valid JSON containing a non-empty mutated_query field."},
+                    {"role": "system", "content": "You are a helpful assistant that rewrites queries. Always respond with valid JSON containing a non-empty mutated_query field. Make sure the rewritten query maintains the original meaning and not more than 50 words in length."},
                     {"role": "user", "content": mutation_prompt + "\n\nRespond with valid JSON: {\"mutated_query\": \"<your complete rewritten query here>\"}\n\nMake sure the mutated_query field is NOT empty."}
                 ],
                 options={
@@ -203,7 +203,7 @@ class OllamaClient:
         
         return results
     
-    def query_target_model(self, query, target_model, temperature=0.0, max_tokens=512, image_path=None):
+    def query_target_model(self, target_model_query, query, target_model, temperature=0.0, max_tokens=512, image_path=None):
         """
         Query the target model using Ollama.
         
@@ -217,15 +217,19 @@ class OllamaClient:
         Returns:
             Model response text
         """
+        print(target_model_query)
         try:
             message = {
                 "role": "user",
-                "content": query
+                "content": target_model_query
             }
             
             # Add image if provided (for vision language models)
             if image_path:
                 message["images"] = [image_path]
+            
+            print(f"Querying target model '{target_model}'...")
+            print(f"Prompt: {target_model_query}")
             
             result = ollama.chat(
                 model=target_model,
@@ -243,13 +247,13 @@ class OllamaClient:
                 print(f"Target model error: {e}")
             return "I cannot help with that request."
     
-    def batch_query_target_model(self, queries, target_model, temperature=0.0, max_tokens=512, image_paths=None, batch_size=8):
+    def batch_query_target_model(self, target_model_query, queries, target_model, temperature=0.0, max_tokens=512, image_paths=None, batch_size=8):
         """Query target model with multiple prompts using concurrent processing"""
         if image_paths is None:
             image_paths = [None] * len(queries)
         
         def query_single(query, image_path):
-            return self.query_target_model(query, target_model, temperature, max_tokens, image_path)
+            return self.query_target_model(target_model_query, query, target_model, temperature, max_tokens, image_path)
         
         results = []
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
