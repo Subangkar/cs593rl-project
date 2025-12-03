@@ -75,18 +75,55 @@ class TextToImageConverter:
         """Wrap text to specified width"""
         return textwrap.fill(text, width=width)
     
-    def _calculate_required_height(self, text: str, margin: int = 40) -> int:
+    def _get_adaptive_font_size(self, text: str, base_size: int = None) -> int:
+        """Calculate adaptive font size based on text length"""
+        if base_size is None:
+            base_size = self.font_size
+        
+        text_length = len(text)
+        
+        # More conservative font size reduction to prevent cropping
+        if text_length > 800:
+            return max(20, base_size // 4)
+        elif text_length > 600:
+            return max(24, int(base_size * 0.4))
+        elif text_length > 450:
+            return max(28, int(base_size * 0.5))
+        elif text_length > 350:
+            return max(32, int(base_size * 0.55))
+        elif text_length > 250:
+            return max(36, int(base_size * 0.65))
+        elif text_length > 180:
+            return max(42, int(base_size * 0.75))
+        else:
+            return base_size
+    
+    def _get_font(self, font_size: int = None):
+        """Get font with specified size"""
+        if font_size is None:
+            return self.font
+        
+        try:
+            return ImageFont.truetype(self.font_path, font_size)
+        except (IOError, OSError):
+            return ImageFont.load_default()
+    
+    def _calculate_required_height(self, text: str, font=None, margin: int = 80) -> int:
         """Calculate required image height based on text content"""
+        if font is None:
+            font = self.font
+        
         # Create temporary image for measurement
         temp_im = Image.new("RGB", (self.width, 100))
         temp_dr = ImageDraw.Draw(temp_im)
         
         # Get text bounding box
-        bbox = temp_dr.textbbox(xy=(20, 20), text=text, font=self.font, spacing=10)
+        bbox = temp_dr.textbbox(xy=(20, 20), text=text, font=font, spacing=10)
         text_height = bbox[3] - bbox[1]
         
-        # Add margins and ensure minimum height
-        required_height = text_height + margin
+        # Add generous margins and ensure minimum height
+        # Multiply by 1.15 for extra safety buffer
+        required_height = int((text_height + margin) * 1.15)
         return max(required_height, 200)  # Minimum 200px
     
     def simple_text_image(
@@ -98,7 +135,7 @@ class TextToImageConverter:
         auto_height: bool = True,
     ) -> str:
         """
-        Create a simple text image with automatic height adjustment.
+        Create a simple text image with automatic height adjustment and adaptive font sizing.
         
         Args:
             text: Text to render
@@ -110,12 +147,21 @@ class TextToImageConverter:
         Returns:
             Path to saved image
         """
+        # Get adaptive font size based on text length
+        adaptive_font_size = self._get_adaptive_font_size(text)
+        font = self._get_font(adaptive_font_size)
+        
+        # Adjust wrap width based on font size (smaller font = more characters per line)
+        if adaptive_font_size < self.font_size:
+            # More generous wrap width adjustment
+            wrap_width = int(wrap_width * (self.font_size / adaptive_font_size) * 1.2)
+        
         if wrap:
             text = self._wrap_text(text, wrap_width)
         
         # Calculate required height if auto_height is enabled
         if auto_height:
-            height = self._calculate_required_height(text)
+            height = self._calculate_required_height(text, font=font)
             # Cap maximum height to prevent extremely large images
             height = min(height, 4096)
         else:
@@ -128,7 +174,7 @@ class TextToImageConverter:
             xy=(20, 20),
             text=text,
             fill=self.text_color,
-            font=self.font,
+            font=font,
             spacing=10,
         )
         
@@ -158,8 +204,17 @@ class TextToImageConverter:
         Returns:
             Path to saved image
         """
+        # Get adaptive font size
+        adaptive_font_size = self._get_adaptive_font_size(text)
+        font = self._get_font(adaptive_font_size)
+        
+        # Adjust wrap width based on font size
+        wrap_width = 20
+        if adaptive_font_size < self.font_size:
+            wrap_width = int(wrap_width * (self.font_size / adaptive_font_size))
+        
         if wrap:
-            text = self._wrap_text(text, width=20)
+            text = self._wrap_text(text, width=wrap_width)
         
         # Add numbered steps
         full_text = text.rstrip("\n")
@@ -168,7 +223,7 @@ class TextToImageConverter:
         
         # Calculate required height if auto_height is enabled
         if auto_height:
-            height = self._calculate_required_height(full_text)
+            height = self._calculate_required_height(full_text, font=font)
             height = min(height, 4096)
         else:
             height = self.height
@@ -180,7 +235,7 @@ class TextToImageConverter:
             xy=(20, 20),
             text=full_text,
             fill=self.text_color,
-            font=self.font,
+            font=font,
             spacing=10,
         )
         
@@ -210,12 +265,21 @@ class TextToImageConverter:
         # Add some archaic styling markers
         styled_text = f"~ {text} ~\n\n[Request in the manner of old English]"
         
+        # Get adaptive font size
+        adaptive_font_size = self._get_adaptive_font_size(styled_text)
+        font = self._get_font(adaptive_font_size)
+        
+        # Adjust wrap width based on font size
+        wrap_width = 25
+        if adaptive_font_size < self.font_size:
+            wrap_width = int(wrap_width * (self.font_size / adaptive_font_size))
+        
         if wrap:
-            styled_text = self._wrap_text(styled_text, width=25)
+            styled_text = self._wrap_text(styled_text, width=wrap_width)
         
         # Calculate required height if auto_height is enabled
         if auto_height:
-            height = self._calculate_required_height(styled_text)
+            height = self._calculate_required_height(styled_text, font=font)
             height = min(height, 4096)
         else:
             height = self.height
@@ -227,7 +291,7 @@ class TextToImageConverter:
             xy=(20, 20),
             text=styled_text,
             fill=self.text_color,
-            font=self.font,
+            font=font,
             spacing=10,
         )
         
@@ -256,12 +320,21 @@ class TextToImageConverter:
         """
         styled_text = f"[TECHNICAL SPECIFICATION]\n\n{text}\n\n[END SPECIFICATION]"
         
+        # Get adaptive font size
+        adaptive_font_size = self._get_adaptive_font_size(styled_text)
+        font = self._get_font(adaptive_font_size)
+        
+        # Adjust wrap width based on font size
+        wrap_width = 25
+        if adaptive_font_size < self.font_size:
+            wrap_width = int(wrap_width * (self.font_size / adaptive_font_size))
+        
         if wrap:
-            styled_text = self._wrap_text(styled_text, width=25)
+            styled_text = self._wrap_text(styled_text, width=wrap_width)
         
         # Calculate required height if auto_height is enabled
         if auto_height:
-            height = self._calculate_required_height(styled_text)
+            height = self._calculate_required_height(styled_text, font=font)
             height = min(height, 4096)
         else:
             height = self.height
@@ -273,7 +346,7 @@ class TextToImageConverter:
             xy=(20, 20),
             text=styled_text,
             fill=self.text_color,
-            font=self.font,
+            font=font,
             spacing=10,
         )
         
@@ -306,12 +379,21 @@ class TextToImageConverter:
             for word in highlight_words:
                 text = text.replace(word, word.upper())
         
+        # Get adaptive font size
+        adaptive_font_size = self._get_adaptive_font_size(text)
+        font = self._get_font(adaptive_font_size)
+        
+        # Adjust wrap width based on font size
+        wrap_width = 25
+        if adaptive_font_size < self.font_size:
+            wrap_width = int(wrap_width * (self.font_size / adaptive_font_size))
+        
         if wrap:
-            text = self._wrap_text(text, width=25)
+            text = self._wrap_text(text, width=wrap_width)
         
         # Calculate required height if auto_height is enabled
         if auto_height:
-            height = self._calculate_required_height(text)
+            height = self._calculate_required_height(text, font=font)
             height = min(height, 4096)
         else:
             height = self.height
@@ -323,7 +405,7 @@ class TextToImageConverter:
             xy=(20, 20),
             text=text,
             fill=self.text_color,
-            font=self.font,
+            font=font,
             spacing=10,
         )
         
@@ -362,9 +444,13 @@ class TextToImageConverter:
         
         formatted_text = "\n".join(formatted_lines)
         
+        # Get adaptive font size
+        adaptive_font_size = self._get_adaptive_font_size(formatted_text)
+        font = self._get_font(adaptive_font_size)
+        
         # Calculate required height if auto_height is enabled
         if auto_height:
-            height = self._calculate_required_height(formatted_text)
+            height = self._calculate_required_height(formatted_text, font=font)
             height = min(height, 4096)
         else:
             height = self.height
@@ -376,7 +462,7 @@ class TextToImageConverter:
             xy=(20, 20),
             text=formatted_text,
             fill=self.text_color,
-            font=self.font,
+            font=font,
             spacing=10,
         )
         
