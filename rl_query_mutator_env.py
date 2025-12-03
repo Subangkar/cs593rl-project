@@ -23,7 +23,7 @@ random.seed(42)
 class QueryMutationEnv(gym.Env):
     """RL Environment for learning query mutations to jailbreak VLMs"""
     
-    def __init__(self, args, obs_size, eval=False, use_image_prompts=False, image_style=None):
+    def __init__(self, args, obs_size, eval=False, use_image_prompts=True, image_style=None):
         """
         Initialize the environment.
         
@@ -53,16 +53,18 @@ class QueryMutationEnv(gym.Env):
             self.image_converter = None
         
         # Initialize dataset loader
-        dataset_loader = DatasetLoader(dataset_path="dataset/prompts_harmful.csv", seed=42)
+        dataset_loader = DatasetLoader(dataset_path="dataset/prompts_harmful_responses.csv", seed=42)
         
         # Load queries and pregenerated responses
         frac_samples = getattr(args, 'frac_samples', 1.0)
-        unaligned_csv = getattr(args, 'unaligned_csv', 'dataset/unaligned_responses.csv')
+        unaligned_csv = getattr(args, 'unaligned_csv', 'dataset/prompts_harmful_responses.csv')
+        use_unified_csv = getattr(args, 'use_unified_csv', True)
         
         self.queries_pool, self.pregenerated_responses, sampled_indices = dataset_loader.load_dataset(
             eval=eval,
             frac_samples=frac_samples,
             unaligned_csv=unaligned_csv,
+            use_unified_csv=use_unified_csv,
             verbose=True
         )
         
@@ -93,10 +95,20 @@ class QueryMutationEnv(gym.Env):
         self.observation_space = spaces.Box(-np.inf, np.inf, (obs_size,))
         self.action_space = spaces.Discrete(len(QueryMutator))
         
+        # Create log directory for images inside save_dir if image saving is enabled
+        self.save_images = getattr(args, 'save_images', False)
+        if self.save_images:
+            save_dir = getattr(args, 'save_dir', 'logs/default_run')
+            self.image_log_dir = os.path.join(save_dir, 'images')
+            os.makedirs(self.image_log_dir, exist_ok=True)
+        else:
+            self.image_log_dir = None
+        
         # Episode state
         self.current_query = None
         self.current_query_embedding = None
         self.current_image_path = None
+        self.current_query_idx = 0
         self.steps = 0
         self.max_steps = 5
         self.total_queries = 0
@@ -109,6 +121,7 @@ class QueryMutationEnv(gym.Env):
         # Sample a random query
         query_idx = np.random.choice(len(self.queries_pool))
         self.current_query = self.queries_pool[query_idx]
+        self.current_query_idx = query_idx
         
         # Encode query as observation
         self.current_query_embedding = self._encode_query(self.current_query)
@@ -129,6 +142,10 @@ class QueryMutationEnv(gym.Env):
         mutated_query = self._mutate_query(self.current_query, QueryMutator(action))
         # print(f"{self.steps}: Original Query: {self.current_query}")
         # print(f"Step {self.steps}: Mutated Query: {mutated_query}")
+        
+        # Save mutated query as image if image saving is enabled
+        if self.save_images and self.image_log_dir and self.use_image_prompts:
+            self._save_query_image(mutated_query)
         
         # Test on target model
         target_response = self._query_target_model(mutated_query)
@@ -185,9 +202,30 @@ class QueryMutationEnv(gym.Env):
         }
         
         prompt = mutation_prompts[mutator]
-        return mutate_query(query, prompt, self.mutator_model)
+        return self.ollama_client.mutate_query(query, prompt, self.mutator_model)
     
-
+    def _save_query_image(self, query):
+        """Save query as image for debugging"""
+        if not self.image_converter:
+            return
+        
+        try:
+            # Generate image from query
+            temp_image_path = self.image_converter.generate_image(
+                query,
+                style=self.image_style,
+                filename=f"mutation_step_{self.steps}.png"
+            )
+            
+            # Copy to log directory with meaningful name
+            import shutil
+            log_image_path = os.path.join(
+                self.image_log_dir, 
+                f"query_{self.current_query_idx}_step_{self.steps}.png"
+            )
+            shutil.copy(temp_image_path, log_image_path)
+        except Exception as e:
+            print(f"Warning: Could not save query image: {e}")
 
     
     def _query_target_model(self, query):
@@ -205,6 +243,15 @@ class QueryMutationEnv(gym.Env):
                 filename=f"query_step_{self.steps}.png"
             )
             self.current_image_path = image_path
+            
+            # Save a copy to logs/images/prompt_{query_idx}.png for debugging (if enabled)
+            if self.save_images and self.image_log_dir:
+                import shutil
+                try:
+                    log_image_path = os.path.join(self.image_log_dir, f"prompt_{self.current_query_idx}.png")
+                    shutil.copy(image_path, log_image_path)
+                except Exception as e:
+                    print(f"Warning: Could not save debug image to {log_image_path}: {e}")
             
             # Use a prompt that instructs the VLM to process the image
             query_text = "Please analyze this image and provide detailed instructions based on what you see."

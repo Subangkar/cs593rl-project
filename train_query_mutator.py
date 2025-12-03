@@ -63,8 +63,10 @@ def main():
                         help='use LLM judge for reward (slower but more accurate)')
     
     # Pregenerated responses
-    parser.add_argument('--unaligned-csv', type=str, default='dataset/unaligned_responses.csv',
+    parser.add_argument('--unaligned-csv', type=str, default='dataset/prompts_harmful_responses.csv',
                         help='CSV file with pregenerated unaligned responses')
+    parser.add_argument('--use-unified-csv', action='store_true', default=True,
+                        help='load both queries and responses from the same CSV file (unaligned-csv)')
     
     # Dataset sampling
     parser.add_argument('--frac-samples', type=float, default=1.0,
@@ -92,6 +94,10 @@ def main():
     parser.add_argument('--batch-size', type=int, default=8,
                         help='number of concurrent API calls in batched operations (default: 8)')
     
+    # Image saving
+    parser.add_argument('--save-images', action='store_true',
+                        help='save generated images for debugging')
+    
     args = parser.parse_args()
     
     # Set device
@@ -103,20 +109,73 @@ def main():
     torch.cuda.manual_seed_all(args.seed)
     np.random.seed(args.seed)
     
-    # Create save directory
-    os.makedirs(args.save_dir, exist_ok=True)
-    
-    # Create CSV log file
+    # Create timestamped run directory under logs
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = os.path.join(args.save_dir, f'training_log_{timestamp}.csv')
+    run_dir = os.path.join('logs', f'run_{timestamp}')
+    os.makedirs(run_dir, exist_ok=True)
+    
+    # Update save_dir to use the timestamped run directory
+    args.save_dir = run_dir
+    
+    # Save run configuration to separate log file
+    config_path = os.path.join(run_dir, 'run.log')
+    with open(config_path, 'w', encoding='utf-8') as config_file:
+        config_file.write("=" * 60 + "\n")
+        config_file.write("Run Configuration\n")
+        config_file.write("=" * 60 + "\n")
+        config_file.write(f"Timestamp: {timestamp}\n")
+        config_file.write(f"Run Directory: {run_dir}\n")
+        config_file.write("\n")
+        config_file.write("Models:\n")
+        config_file.write(f"  Target Model: {args.target_model}\n")
+        config_file.write(f"  Mutator Model: {args.mutator_model}\n")
+        config_file.write(f"  Judge Model: {args.judge_model}\n")
+        config_file.write(f"  Uncensored Model: {args.uncensored_model}\n")
+        config_file.write("\n")
+        config_file.write("Training Parameters:\n")
+        config_file.write(f"  Num Env Steps: {args.num_env_steps}\n")
+        config_file.write(f"  Num Steps: {args.num_steps}\n")
+        config_file.write(f"  Num Processes: {args.num_processes}\n")
+        config_file.write(f"  Learning Rate: {args.lr}\n")
+        config_file.write(f"  Gamma: {args.gamma}\n")
+        config_file.write(f"  PPO Epochs: {args.ppo_epoch}\n")
+        config_file.write(f"  Num Mini Batch: {args.num_mini_batch}\n")
+        config_file.write(f"  Clip Param: {args.clip_param}\n")
+        config_file.write(f"  Value Loss Coef: {args.value_loss_coef}\n")
+        config_file.write(f"  Entropy Coef: {args.entropy_coef}\n")
+        config_file.write(f"  Max Grad Norm: {args.max_grad_norm}\n")
+        config_file.write("\n")
+        config_file.write("Reward & Dataset:\n")
+        config_file.write(f"  Use LLM Judge: {args.use_llm_judge}\n")
+        config_file.write(f"  Unaligned CSV: {args.unaligned_csv}\n")
+        config_file.write(f"  Use Unified CSV: {args.use_unified_csv}\n")
+        config_file.write(f"  Fraction Samples: {args.frac_samples}\n")
+        config_file.write("\n")
+        config_file.write("Batching:\n")
+        config_file.write(f"  Use Batching: {args.use_batching}\n")
+        config_file.write(f"  Batch Size: {args.batch_size}\n")
+        config_file.write("\n")
+        config_file.write("Other:\n")
+        config_file.write(f"  Device: {'cuda' if args.cuda else 'cpu'}\n")
+        config_file.write(f"  Seed: {args.seed}\n")
+        config_file.write(f"  Save Images: {args.save_images}\n")
+        config_file.write(f"  Save Interval: {args.save_interval}\n")
+        config_file.write(f"  Log Interval: {args.log_interval}\n")
+        config_file.write("=" * 60 + "\n")
+    
+    # Create CSV log file for training events
+    csv_path = os.path.join(run_dir, 'training_log.csv')
     csv_file = open(csv_path, 'w', newline='', encoding='utf-8')
     csv_writer = csv.writer(csv_file)
+    
+    # Write column headers only
     csv_writer.writerow(['step', 'update', 'episode', 'query', 'mutation_type', 'mutated_query', 
                          'target_response', 'unaligned_response', 'reward_score', 'mutation_number'])
     
     print("="*60)
     print("RL Query Mutation Training")
     print("="*60)
+    print(f"Run Directory: {run_dir}")
     print(f"Target Model: {args.target_model}")
     print(f"Mutator Model: {args.mutator_model}")
     print(f"Judge Model: {args.judge_model}")
@@ -126,7 +185,6 @@ def main():
     if args.use_batching:
         print(f"Batch Size: {args.batch_size} concurrent API calls")
     print(f"Device: {device}")
-    print(f"Save Directory: {args.save_dir}")
     print("="*60)
     
     # Observation size (nomic-embed-text has 768 dimensions)
@@ -372,6 +430,8 @@ def main():
         
         print("\n" + "="*60)
         print("Training Complete!")
+        print(f"Run Directory: {run_dir}")
+        print(f"Config saved to {config_path}")
         print(f"Final model saved to {final_path}")
         print(f"Training log saved to {csv_path}")
         print(f"Total Steps: {total_steps}")
