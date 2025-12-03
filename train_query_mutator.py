@@ -83,6 +83,8 @@ def main():
     # Device
     parser.add_argument('--no-cuda', action='store_true',
                         help='disable CUDA training')
+    parser.add_argument('--force-gpu', action='store_true',
+                        help='force GPU usage (fail if CUDA not available)')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed')
     
@@ -109,8 +111,25 @@ def main():
     args.use_image_prompts = not args.no_image_prompts
     
     # Set device
+    if args.force_gpu and not torch.cuda.is_available():
+        raise RuntimeError("--force-gpu specified but CUDA is not available")
+    
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+    if args.force_gpu:
+        args.cuda = True
+        
     device = torch.device("cuda:0" if args.cuda else "cpu")
+    
+    # Print device selection debug info
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    print(f"no_cuda flag: {args.no_cuda}")
+    print(f"force_gpu flag: {args.force_gpu}")
+    print(f"Using CUDA: {args.cuda}")
+    if torch.cuda.is_available():
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    print(f"Selected device: {device}")
+    print("-" * 40)
     
     # Set seeds
     torch.manual_seed(args.seed)
