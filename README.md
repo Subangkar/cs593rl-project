@@ -73,7 +73,7 @@ ollama pull wizard-vicuna-uncensored # Uncensored model (for LLM judge)
 
 ```bash
 python train_query_mutator.py \
-    --target-model llama3.1:8b \
+    --target-model llava \
     --mutator-model qwen2.5:7b \
     --num-processes 16 \
     --batch-size 8 \
@@ -106,7 +106,6 @@ CUDA_VISIBLE_DEVICES=1,3 python train_query_mutator.py \
     --target-model llava:latest \
     --judge-model deepseek-r1:14b \
     --use-llm-judge \
-    --unaligned-csv dataset/unaligned_responses.csv \
     --num-processes 2 \
     --batch-size 32 \
     --frac-samples 0.25 \

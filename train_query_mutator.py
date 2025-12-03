@@ -212,8 +212,11 @@ def main():
     # Observation size (nomic-embed-text has 768 dimensions)
     obs_size = 768
     
+    # Create image log directory if saving images
+    image_log_dir = os.path.join(run_dir, 'images') if args.save_images else None
+    
     # Create dummy environment to get spaces
-    dummy_env = QueryMutationEnv(args, obs_size, eval=False, use_image_prompts=args.use_image_prompts, image_style=image_style)
+    dummy_env = QueryMutationEnv(args, obs_size, eval=False, use_image_prompts=args.use_image_prompts, image_style=image_style, image_log_dir=image_log_dir)
     
     # Create actor-critic policy
     actor_critic = Policy(
@@ -255,7 +258,7 @@ def main():
     print(f"Creating {args.num_processes} parallel environments...")
     envs = []
     for i in range(args.num_processes):
-        env = QueryMutationEnv(args, obs_size, eval=False, use_image_prompts=args.use_image_prompts, image_style=image_style)
+        env = QueryMutationEnv(args, obs_size, eval=False, use_image_prompts=args.use_image_prompts, image_style=image_style, image_log_dir=image_log_dir)
         envs.append(env)
     
     # Wrap environments in batched wrapper if batching is enabled

@@ -23,7 +23,7 @@ random.seed(42)
 class QueryMutationEnv(gym.Env):
     """RL Environment for learning query mutations to jailbreak VLMs"""
     
-    def __init__(self, args, obs_size, eval=False, use_image_prompts=True, image_style=None):
+    def __init__(self, args, obs_size, eval=False, use_image_prompts=True, image_style=None, image_log_dir=None):
         """
         Initialize the environment.
         
@@ -33,11 +33,13 @@ class QueryMutationEnv(gym.Env):
             eval: Whether in evaluation mode
             use_image_prompts: Whether to convert prompts to images for VLM
             image_style: ImagePromptStyle to use if use_image_prompts is True
+            image_log_dir: Directory to save images (if save_images is enabled)
         """
         super(QueryMutationEnv, self).__init__()
         self.args = args
         self.eval = eval
         self.use_image_prompts = use_image_prompts
+        self.image_log_dir_param = image_log_dir
         self.image_style = image_style if image_style is not None else ImagePromptStyle.simple_text
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
@@ -95,12 +97,12 @@ class QueryMutationEnv(gym.Env):
         self.observation_space = spaces.Box(-np.inf, np.inf, (obs_size,))
         self.action_space = spaces.Discrete(len(QueryMutator))
         
-        # Create log directory for images inside save_dir if image saving is enabled
+        # Set image log directory if image saving is enabled
         self.save_images = getattr(args, 'save_images', False)
-        if self.save_images:
-            save_dir = getattr(args, 'save_dir', 'logs/default_run')
-            self.image_log_dir = os.path.join(save_dir, 'images')
+        if self.save_images and self.image_log_dir_param:
+            self.image_log_dir = self.image_log_dir_param
             os.makedirs(self.image_log_dir, exist_ok=True)
+            print(f"Images will be saved to: {self.image_log_dir}")
         else:
             self.image_log_dir = None
         
@@ -377,11 +379,38 @@ class BatchedQueryMutationEnv:
             batch_size=self.batch_size
         )
         
-        # Batch query target model
+        # Generate images and query target model (with or without images)
         target_model = self.envs[0].target_model
+        use_image_prompts = self.envs[0].use_image_prompts
+        
+        image_paths = []
+        if use_image_prompts:
+            # Generate images for each mutated query
+            for i, (env, mutated_query) in enumerate(zip(self.envs, mutated_queries)):
+                image_path = env.image_converter.generate_image(
+                    mutated_query,
+                    style=env.image_style,
+                    filename=f"query_env{i}_step_{env.steps}.png"
+                )
+                env.current_image_path = image_path
+                image_paths.append(image_path)
+                
+                # Save a copy to log directory if enabled
+                if env.save_images and env.image_log_dir:
+                    import shutil
+                    try:
+                        log_image_path = os.path.join(env.image_log_dir, f"query_{env.current_query_idx}_step_{env.steps}.png")
+                        shutil.copy(image_path, log_image_path)
+                    except Exception as e:
+                        print(f"Warning: Could not save image for env {i}: {e}")
+        else:
+            image_paths = [None] * len(mutated_queries)
+        
+        # Batch query target model (works with or without images)
         target_responses = self.ollama_client.batch_query_target_model(
             mutated_queries,
             target_model,
+            image_paths=image_paths,
             batch_size=self.batch_size
         )
         

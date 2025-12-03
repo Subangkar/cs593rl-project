@@ -12,3 +12,4 @@ trained_models_query_mutator/
 *.pt
 
 logs/
+**temp**/
