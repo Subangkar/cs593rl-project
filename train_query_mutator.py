@@ -94,11 +94,19 @@ def main():
     parser.add_argument('--batch-size', type=int, default=8,
                         help='number of concurrent API calls in batched operations (default: 8)')
     
-    # Image saving
+    # Image-based prompts
+    parser.add_argument('--no-image-prompts', action='store_true',
+                        help='disable image-based prompts and use text prompts instead')
+    parser.add_argument('--image-style', type=str, default='simple_text',
+                        choices=['simple_text', 'stepwise', 'archaic_english', 'technical_jargon', 'highlighted', 'multi_line'],
+                        help='style for image-based prompts (default: simple_text)')
     parser.add_argument('--save-images', action='store_true',
                         help='save generated images for debugging')
     
     args = parser.parse_args()
+    
+    # Image prompts are enabled by default
+    args.use_image_prompts = not args.no_image_prompts
     
     # Set device
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -155,10 +163,14 @@ def main():
         config_file.write(f"  Use Batching: {args.use_batching}\n")
         config_file.write(f"  Batch Size: {args.batch_size}\n")
         config_file.write("\n")
+        config_file.write("Image-Based Prompts:\n")
+        config_file.write(f"  Use Image Prompts: {args.use_image_prompts}\n")
+        config_file.write(f"  Image Style: {args.image_style}\n")
+        config_file.write(f"  Save Images: {args.save_images}\n")
+        config_file.write("\n")
         config_file.write("Other:\n")
         config_file.write(f"  Device: {'cuda' if args.cuda else 'cpu'}\n")
         config_file.write(f"  Seed: {args.seed}\n")
-        config_file.write(f"  Save Images: {args.save_images}\n")
         config_file.write(f"  Save Interval: {args.save_interval}\n")
         config_file.write(f"  Log Interval: {args.log_interval}\n")
         config_file.write("=" * 60 + "\n")
@@ -184,14 +196,24 @@ def main():
     print(f"Use Batching: {args.use_batching}")
     if args.use_batching:
         print(f"Batch Size: {args.batch_size} concurrent API calls")
+    print(f"Use Image Prompts: {args.use_image_prompts}")
+    if args.use_image_prompts:
+        print(f"Image Style: {args.image_style}")
+    print(f"Save Images: {args.save_images}")
     print(f"Device: {device}")
     print("="*60)
+    
+    # Get image style enum if using image prompts
+    image_style = None
+    if args.use_image_prompts:
+        from image_prompt_generator import ImagePromptStyle
+        image_style = ImagePromptStyle[args.image_style]
     
     # Observation size (nomic-embed-text has 768 dimensions)
     obs_size = 768
     
     # Create dummy environment to get spaces
-    dummy_env = QueryMutationEnv(args, obs_size, eval=False)
+    dummy_env = QueryMutationEnv(args, obs_size, eval=False, use_image_prompts=args.use_image_prompts, image_style=image_style)
     
     # Create actor-critic policy
     actor_critic = Policy(
@@ -233,7 +255,7 @@ def main():
     print(f"Creating {args.num_processes} parallel environments...")
     envs = []
     for i in range(args.num_processes):
-        env = QueryMutationEnv(args, obs_size, eval=False)
+        env = QueryMutationEnv(args, obs_size, eval=False, use_image_prompts=args.use_image_prompts, image_style=image_style)
         envs.append(env)
     
     # Wrap environments in batched wrapper if batching is enabled

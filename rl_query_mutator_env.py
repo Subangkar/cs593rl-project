@@ -244,11 +244,11 @@ class QueryMutationEnv(gym.Env):
             )
             self.current_image_path = image_path
             
-            # Save a copy to logs/images/prompt_{query_idx}.png for debugging (if enabled)
+            # Save a copy to logs/images/query_{idx}_step_{n}.png for debugging (if enabled)
             if self.save_images and self.image_log_dir:
                 import shutil
                 try:
-                    log_image_path = os.path.join(self.image_log_dir, f"prompt_{self.current_query_idx}.png")
+                    log_image_path = os.path.join(self.image_log_dir, f"query_{self.current_query_idx}_step_{self.steps}.png")
                     shutil.copy(image_path, log_image_path)
                 except Exception as e:
                     print(f"Warning: Could not save debug image to {log_image_path}: {e}")

@@ -75,21 +75,37 @@ class TextToImageConverter:
         """Wrap text to specified width"""
         return textwrap.fill(text, width=width)
     
+    def _calculate_required_height(self, text: str, margin: int = 40) -> int:
+        """Calculate required image height based on text content"""
+        # Create temporary image for measurement
+        temp_im = Image.new("RGB", (self.width, 100))
+        temp_dr = ImageDraw.Draw(temp_im)
+        
+        # Get text bounding box
+        bbox = temp_dr.textbbox(xy=(20, 20), text=text, font=self.font, spacing=10)
+        text_height = bbox[3] - bbox[1]
+        
+        # Add margins and ensure minimum height
+        required_height = text_height + margin
+        return max(required_height, 200)  # Minimum 200px
+    
     def simple_text_image(
         self,
         text: str,
         filename: str = "prompt_simple.png",
         wrap: bool = True,
         wrap_width: int = 30,
+        auto_height: bool = True,
     ) -> str:
         """
-        Create a simple text image.
+        Create a simple text image with automatic height adjustment.
         
         Args:
             text: Text to render
             filename: Output filename
             wrap: Whether to wrap text
             wrap_width: Character width for wrapping
+            auto_height: Automatically adjust height to fit text
             
         Returns:
             Path to saved image
@@ -97,7 +113,15 @@ class TextToImageConverter:
         if wrap:
             text = self._wrap_text(text, wrap_width)
         
-        im = Image.new("RGB", (self.width, self.height), self.bg_color)
+        # Calculate required height if auto_height is enabled
+        if auto_height:
+            height = self._calculate_required_height(text)
+            # Cap maximum height to prevent extremely large images
+            height = min(height, 4096)
+        else:
+            height = self.height
+        
+        im = Image.new("RGB", (self.width, height), self.bg_color)
         dr = ImageDraw.Draw(im)
         
         dr.text(
@@ -118,6 +142,7 @@ class TextToImageConverter:
         steps: int = 3,
         filename: str = "prompt_stepwise.png",
         wrap: bool = True,
+        auto_height: bool = True,
     ) -> str:
         """
         Create a stepwise numbered image (1, 2, 3, ...).
@@ -128,6 +153,7 @@ class TextToImageConverter:
             steps: Number of steps to generate
             filename: Output filename
             wrap: Whether to wrap text
+            auto_height: Automatically adjust height to fit text
             
         Returns:
             Path to saved image
@@ -140,7 +166,14 @@ class TextToImageConverter:
         for idx in range(1, steps + 1):
             full_text += f"\n{idx}. "
         
-        im = Image.new("RGB", (self.width, self.height), self.bg_color)
+        # Calculate required height if auto_height is enabled
+        if auto_height:
+            height = self._calculate_required_height(full_text)
+            height = min(height, 4096)
+        else:
+            height = self.height
+        
+        im = Image.new("RGB", (self.width, height), self.bg_color)
         dr = ImageDraw.Draw(im)
         
         dr.text(
@@ -160,6 +193,7 @@ class TextToImageConverter:
         text: str,
         filename: str = "prompt_archaic.png",
         wrap: bool = True,
+        auto_height: bool = True,
     ) -> str:
         """
         Create an image with archaic/old English style formatting.
@@ -168,6 +202,7 @@ class TextToImageConverter:
             text: Text to render
             filename: Output filename
             wrap: Whether to wrap text
+            auto_height: Automatically adjust height to fit text
             
         Returns:
             Path to saved image
@@ -178,7 +213,14 @@ class TextToImageConverter:
         if wrap:
             styled_text = self._wrap_text(styled_text, width=25)
         
-        im = Image.new("RGB", (self.width, self.height), self.bg_color)
+        # Calculate required height if auto_height is enabled
+        if auto_height:
+            height = self._calculate_required_height(styled_text)
+            height = min(height, 4096)
+        else:
+            height = self.height
+        
+        im = Image.new("RGB", (self.width, height), self.bg_color)
         dr = ImageDraw.Draw(im)
         
         dr.text(
@@ -198,6 +240,7 @@ class TextToImageConverter:
         text: str,
         filename: str = "prompt_technical.png",
         wrap: bool = True,
+        auto_height: bool = True,
     ) -> str:
         """
         Create an image with technical/formal presentation.
@@ -206,6 +249,7 @@ class TextToImageConverter:
             text: Text to render
             filename: Output filename
             wrap: Whether to wrap text
+            auto_height: Automatically adjust height to fit text
             
         Returns:
             Path to saved image
@@ -215,7 +259,14 @@ class TextToImageConverter:
         if wrap:
             styled_text = self._wrap_text(styled_text, width=25)
         
-        im = Image.new("RGB", (self.width, self.height), self.bg_color)
+        # Calculate required height if auto_height is enabled
+        if auto_height:
+            height = self._calculate_required_height(styled_text)
+            height = min(height, 4096)
+        else:
+            height = self.height
+        
+        im = Image.new("RGB", (self.width, height), self.bg_color)
         dr = ImageDraw.Draw(im)
         
         dr.text(
@@ -236,6 +287,7 @@ class TextToImageConverter:
         highlight_words: list = None,
         filename: str = "prompt_highlighted.png",
         wrap: bool = True,
+        auto_height: bool = True,
     ) -> str:
         """
         Create an image with highlighted key terms.
@@ -245,6 +297,7 @@ class TextToImageConverter:
             highlight_words: List of words to highlight (uppercase)
             filename: Output filename
             wrap: Whether to wrap text
+            auto_height: Automatically adjust height to fit text
             
         Returns:
             Path to saved image
@@ -256,7 +309,14 @@ class TextToImageConverter:
         if wrap:
             text = self._wrap_text(text, width=25)
         
-        im = Image.new("RGB", (self.width, self.height), self.bg_color)
+        # Calculate required height if auto_height is enabled
+        if auto_height:
+            height = self._calculate_required_height(text)
+            height = min(height, 4096)
+        else:
+            height = self.height
+        
+        im = Image.new("RGB", (self.width, height), self.bg_color)
         dr = ImageDraw.Draw(im)
         
         dr.text(
@@ -276,6 +336,7 @@ class TextToImageConverter:
         text: str,
         lines_per_section: int = 3,
         filename: str = "prompt_multiline.png",
+        auto_height: bool = True,
     ) -> str:
         """
         Create an image with multi-line formatted text.
@@ -284,6 +345,7 @@ class TextToImageConverter:
             text: Text to render
             lines_per_section: Lines per section
             filename: Output filename
+            auto_height: Automatically adjust height to fit text
             
         Returns:
             Path to saved image
@@ -300,7 +362,14 @@ class TextToImageConverter:
         
         formatted_text = "\n".join(formatted_lines)
         
-        im = Image.new("RGB", (self.width, self.height), self.bg_color)
+        # Calculate required height if auto_height is enabled
+        if auto_height:
+            height = self._calculate_required_height(formatted_text)
+            height = min(height, 4096)
+        else:
+            height = self.height
+        
+        im = Image.new("RGB", (self.width, height), self.bg_color)
         dr = ImageDraw.Draw(im)
         
         dr.text(
