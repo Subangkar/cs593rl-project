@@ -219,7 +219,7 @@ class TextToImageConverter:
         
         # Build full text with numbered list (don't wrap this part)
         full_text = text.rstrip("\n")
-        full_text += "\n\nFill in the below steps:\n"
+        # full_text += "\n\nFill in the below steps:\n"
         for idx in range(1, steps + 1):
             full_text += f"\n{idx}.\n"
         

@@ -11,7 +11,7 @@ import argparse
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
-import csv
+import json
 from datetime import datetime
 
 # Import RL core components
@@ -63,7 +63,7 @@ def main():
                         help='use LLM judge for reward (slower but more accurate)')
     
     # Pregenerated responses
-    parser.add_argument('--unaligned-csv', type=str, default='dataset/prompts_harmful_responses.csv',
+    parser.add_argument('--unaligned-csv', type=str, default='dataset/prompts_harmful_responses_original_backup.csv',
                         help='CSV file with pregenerated unaligned responses')
     parser.add_argument('--use-unified-csv', action='store_true', default=True,
                         help='load both queries and responses from the same CSV file (unaligned-csv)')
@@ -194,14 +194,11 @@ def main():
         config_file.write(f"  Log Interval: {args.log_interval}\n")
         config_file.write("=" * 60 + "\n")
     
-    # Create CSV log file for training events
-    csv_path = os.path.join(run_dir, 'training_log.csv')
-    csv_file = open(csv_path, 'w', newline='', encoding='utf-8')
-    csv_writer = csv.writer(csv_file)
-    
-    # Write column headers only
-    csv_writer.writerow(['step', 'update', 'episode', 'query', 'mutation_type', 'mutated_query', 
-                         'target_response', 'unaligned_response', 'reward_score', 'mutation_number'])
+    # Create JSON log file for training events
+    json_path = os.path.join(run_dir, 'training_log.json')
+    json_file = open(json_path, 'w', encoding='utf-8')
+    json_file.write('[\n')  # Start JSON array
+    first_entry = True  # Track if we need to add comma before entry
     
     print("="*60)
     print("RL Query Mutation Training")
@@ -364,22 +361,31 @@ def main():
                     obs_batch = np.array(obs_batch)
                     reward_batch = np.array(reward_batch)
                 
-                # Log to CSV and handle episode resets
+                # Log to JSON and handle episode resets
                 for i, (obs_i, reward_i, done_i, info_i) in enumerate(zip(obs_batch, reward_batch, done_batch, info_batch)):
                     action_idx = action_indices[i]
                     mutation_name = QueryMutator(action_idx).name
-                    csv_writer.writerow([
-                        total_steps + i,
-                        update,
-                        episode_count,
-                        info_i.get('original_query', ''),  # Truncate for readability
-                        mutation_name,
-                        info_i.get('mutated_query', ''),
-                        info_i.get('target_response', ''),
-                        info_i.get('unaligned_response', '') if 'unaligned_response' in info_i else '',
-                        reward_i,
-                        envs[i].steps
-                    ])
+                    
+                    log_entry = {
+                        'step': int(total_steps + i),
+                        'update': int(update),
+                        'episode': int(episode_count),
+                        'query': info_i.get('original_query', ''),
+                        'mutation_type': mutation_name,
+                        'mutated_query': info_i.get('mutated_query', ''),
+                        'target_response': info_i.get('target_response', ''),
+                        'unaligned_response': info_i.get('unaligned_response', '') if 'unaligned_response' in info_i else '',
+                        'reward_score': float(reward_i),
+                        'mutation_number': int(envs[i].steps),
+                        'judge_explanation': info_i.get('judge_explanation', '')
+                    }
+                    
+                    # Write entry to JSON file
+                    if not first_entry:
+                        json_file.write(',\n')
+                    json.dump(log_entry, json_file, indent=2)
+                    json_file.flush()
+                    first_entry = False
                     
                     if done_i:
                         episode_rewards.append(info_i.get('reward', 0))
@@ -460,10 +466,6 @@ def main():
         if pbar:
             pbar.close()
         
-        # Close CSV file
-        if csv_file and not csv_file.closed:
-            csv_file.close()
-        
         # Save final model
         final_path = os.path.join(args.save_dir, 'final_model.pt')
         torch.save({
@@ -472,12 +474,16 @@ def main():
             'total_steps': total_steps,
         }, final_path)
         
+        # Close JSON array
+        json_file.write('\n]')
+        json_file.close()
+        
         print("\n" + "="*60)
         print("Training Complete!")
         print(f"Run Directory: {run_dir}")
         print(f"Config saved to {config_path}")
         print(f"Final model saved to {final_path}")
-        print(f"Training log saved to {csv_path}")
+        print(f"Training log saved to {json_path}")
         print(f"Total Steps: {total_steps}")
         print(f"Final Success Rate: {envs[0].successful_attacks / max(1, envs[0].total_queries):.2%}")
         print("="*60)
