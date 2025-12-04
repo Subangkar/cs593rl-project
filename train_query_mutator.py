@@ -200,6 +200,12 @@ def main():
     json_file.write('[\n')  # Start JSON array
     first_entry = True  # Track if we need to add comma before entry
     
+    # Create ASR log file for tracking attack success rates
+    asr_log_path = os.path.join(run_dir, 'asr_logs.json')
+    asr_log_file = open(asr_log_path, 'w', encoding='utf-8')
+    asr_log_file.write('[\n')  # Start JSON array
+    first_asr_entry = True
+    
     print("="*60)
     print("RL Query Mutation Training")
     print("="*60)
@@ -395,6 +401,23 @@ def main():
                         if args.use_batching:
                             obs_batch[i] = envs[i].reset()
                 
+                # Print running ASR every 10 steps
+                if (total_steps + args.num_processes) % 10 == 0:
+                    current_successful = sum(env.successful_attacks for env in envs)
+                    current_total = sum(env.total_queries for env in envs)
+                    current_asr = current_successful / max(1, current_total)
+                    current_avg_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0.0
+                    current_update = total_steps // args.num_steps  # Calculate current update number
+                    
+                    # Update progress bar with current metrics
+                    pbar.set_postfix({
+                        'update': f'{current_update}/{num_updates}',
+                        'reward': f'{current_avg_reward:.3f}',
+                        'ASR': f'{current_asr:.1%}',
+                    })
+                    
+                    tqdm.write(f"[Step {total_steps + args.num_processes}] Running ASR: {current_asr:.2%} ({current_successful}/{current_total})")
+                
                 # Convert to tensors
                 obs = torch.FloatTensor(obs_batch).to(device)
                 rewards = torch.FloatTensor(reward_batch).unsqueeze(1).to(device)
@@ -420,29 +443,69 @@ def main():
             
             rollouts.after_update()
             
-            # Logging
-            if update % args.log_interval == 0:
-                avg_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0.0
-                avg_length = np.mean(episode_lengths[-100:]) if episode_lengths else 0.0
-                success_rate = envs[0].successful_attacks / max(1, envs[0].total_queries)
-                
-                # Update progress bar with metrics
-                pbar.set_postfix({
-                    'update': f'{update}/{num_updates}',
-                    'reward': f'{avg_reward:.3f}',
-                    'success': f'{success_rate:.1%}',
-                    'v_loss': f'{value_loss:.3f}',
-                    'a_loss': f'{action_loss:.3f}'
+            # Logging - Log EVERY update instead of every 10
+            avg_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0.0
+            avg_length = np.mean(episode_lengths[-100:]) if episode_lengths else 0.0
+            
+            # Calculate combined ASR across all environments
+            total_successful = sum(env.successful_attacks for env in envs)
+            total_queries_all = sum(env.total_queries for env in envs)
+            combined_asr = total_successful / max(1, total_queries_all)
+            
+            # Calculate per-environment ASR
+            per_env_asr = []
+            per_env_details = []
+            for i, env in enumerate(envs):
+                env_asr = env.successful_attacks / max(1, env.total_queries)
+                per_env_asr.append(env_asr)
+                per_env_details.append({
+                    'env_id': i,
+                    'successful_attacks': env.successful_attacks,
+                    'total_queries': env.total_queries,
+                    'asr': env_asr
                 })
-                
+            
+            # Log ASR to separate file EVERY update
+            asr_entry = {
+                'update': int(update),
+                'total_steps': int(total_steps),
+                'combined_asr': float(combined_asr),
+                'total_successful_attacks': int(total_successful),
+                'total_queries': int(total_queries_all),
+                'per_environment': per_env_details,
+                'avg_reward': float(avg_reward),
+                'avg_episode_length': float(avg_length)
+            }
+            
+            if not first_asr_entry:
+                asr_log_file.write(',\n')
+            json.dump(asr_entry, asr_log_file, indent=2)
+            asr_log_file.flush()
+            first_asr_entry = False
+            
+            # Update progress bar with metrics EVERY update
+            pbar.set_postfix({
+                'update': f'{update}/{num_updates}',
+                'reward': f'{avg_reward:.3f}',
+                'ASR': f'{combined_asr:.1%}',
+                'v_loss': f'{value_loss:.3f}',
+                'a_loss': f'{action_loss:.3f}'
+            })
+            
+            # Detailed console logging every log_interval updates
+            if update % args.log_interval == 0:
                 # Detailed logging
-                tqdm.write(f"\nUpdate {update}/{num_updates} | Steps {total_steps}/{args.num_env_steps}")
+                tqdm.write(f"\n{'='*60}")
+                tqdm.write(f"Update {update}/{num_updates} | Steps {total_steps}/{args.num_env_steps}")
+                tqdm.write(f"{'='*60}")
                 tqdm.write(f"  Avg Reward: {avg_reward:.4f}")
                 tqdm.write(f"  Avg Episode Length: {avg_length:.2f}")
-                tqdm.write(f"  Success Rate: {success_rate:.2%}")
+                tqdm.write(f"  Combined ASR: {combined_asr:.2%} ({total_successful}/{total_queries_all})")
+                tqdm.write(f"  Per-Env ASR: {[f'Env{i}:{rate:.1%}' for i, rate in enumerate(per_env_asr)]}")
                 tqdm.write(f"  Value Loss: {value_loss:.4f}")
                 tqdm.write(f"  Action Loss: {action_loss:.4f}")
                 tqdm.write(f"  Entropy: {dist_entropy:.4f}")
+                tqdm.write(f"{'='*60}")
             
             # Save checkpoint
             if update % args.save_interval == 0 and update > 0:
@@ -474,18 +537,31 @@ def main():
             'total_steps': total_steps,
         }, final_path)
         
-        # Close JSON array
+        # Close JSON arrays
         json_file.write('\n]')
         json_file.close()
+        asr_log_file.write('\n]')
+        asr_log_file.close()
+        
+        # Calculate final ASR statistics
+        total_successful = sum(env.successful_attacks for env in envs)
+        total_queries_all = sum(env.total_queries for env in envs)
+        final_combined_asr = total_successful / max(1, total_queries_all)
         
         print("\n" + "="*60)
         print("Training Complete!")
+        print("="*60)
         print(f"Run Directory: {run_dir}")
         print(f"Config saved to {config_path}")
         print(f"Final model saved to {final_path}")
         print(f"Training log saved to {json_path}")
-        print(f"Total Steps: {total_steps}")
-        print(f"Final Success Rate: {envs[0].successful_attacks / max(1, envs[0].total_queries):.2%}")
+        print(f"ASR log saved to {asr_log_path}")
+        print(f"\nTotal Steps: {total_steps}")
+        print(f"\nFinal Combined ASR: {final_combined_asr:.2%} ({total_successful}/{total_queries_all})")
+        print(f"\nPer-Environment Final ASR:")
+        for i, env in enumerate(envs):
+            env_asr = env.successful_attacks / max(1, env.total_queries)
+            print(f"  Env {i}: {env_asr:.2%} ({env.successful_attacks}/{env.total_queries} successful)")
         print("="*60)
 
 
