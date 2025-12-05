@@ -13,3 +13,4 @@ trained_models_query_mutator/
 
 logs/
 **temp**/
+baseline_results/

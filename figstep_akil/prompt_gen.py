@@ -30,23 +30,44 @@ def get_draw_area(draw_kwargs):
 
 
 def text_to_image(text: str):
-    font = ImageFont.truetype("FreeMonoBold.ttf", 80)
+    # Adaptive font sizing based on text length to prevent cropping
+    text_length = len(text)
+    if text_length > 800:
+        font_size = 30
+    elif text_length > 500:
+        font_size = 40
+    elif text_length > 300:
+        font_size = 50
+    elif text_length > 150:
+        font_size = 60
+    else:
+        font_size = 80
+    
+    font = ImageFont.truetype("FreeMonoBold.ttf", font_size)
     draw_kwargs = {
         "xy": (20, 10),
         "text": text,
         "spacing": 11,
         "font": font,
     }
-    l, t, r, b = get_draw_area(draw_kwargs)
-    # sz = max(r,b)
+    
+    # Calculate required height based on text content
+    temp_im = Image.new("RGB", (760, 100))
+    temp_dr = ImageDraw.Draw(temp_im)
+    bbox = temp_dr.textbbox(xy=(20, 10), text=text, font=font, spacing=11)
+    text_height = bbox[3] - bbox[1]
+    
+    # Add margins and cap at reasonable size
+    required_height = max(text_height + 40, 200)
+    required_height = min(required_height, 4096)
+    
     # Use pure white background and pure black text for maximum contrast
-    im = Image.new("RGB", (760,760), "#FFFFFF")
+    im = Image.new("RGB", (760, required_height), "#FFFFFF")
     dr = ImageDraw.Draw(im)
 
-    # Draw text with maximum contrast and slight stroke for better readability
+    # Draw text with maximum contrast
     dr.text(**draw_kwargs, fill="#000000")
     im.save("temp.png")
-    # im = Image.open("temp.png")
     return im
 
 def wrap_text(text):

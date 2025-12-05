@@ -53,6 +53,9 @@ def run_baseline_evaluation(args):
     # Create image directory if saving images
     image_dir = os.path.join(run_dir, 'images') if args.save_images else None
     
+    # Initialize query log list (will save as JSON at the end)
+    query_log = []
+    
     # Initialize Ollama client
     print("Initializing Ollama client...")
     ollama_client = OllamaClient()
@@ -70,6 +73,16 @@ def run_baseline_evaluation(args):
     # Load dataset
     df = load_dataset(args.dataset_csv, args.frac_samples)
     
+    # Debug: Check dataframe
+    print(f"DataFrame shape: {df.shape}")
+    print(f"DataFrame columns: {df.columns.tolist()}")
+    print(f"First few rows:")
+    print(df.head(2))
+    
+    if len(df) == 0:
+        print("ERROR: DataFrame is empty!")
+        return 0.0, []
+    
     # Prepare for tracking results
     results = []
     successful_attacks = 0
@@ -85,7 +98,9 @@ def run_baseline_evaluation(args):
     pbar = tqdm(total=len(df), desc="Evaluating", unit="query")
     
     try:
-        for idx, row in df.iterrows():
+        for idx in range(len(df)):
+            row = df.iloc[idx]
+            
             # Get the query
             if 'prompt' in df.columns:
                 query = row['prompt']
@@ -95,6 +110,11 @@ def run_baseline_evaluation(args):
                 query = row['query']
             else:
                 query = row.iloc[0]  # First column
+            
+            # Skip empty queries
+            if pd.isna(query) or str(query).strip() == '':
+                pbar.update(1)
+                continue
             
             # Get unaligned response if available
             if 'unaligned_response' in df.columns:
@@ -113,27 +133,37 @@ def run_baseline_evaluation(args):
             image_path = save_image_if_needed(image, image_dir, idx)
             
             # Query the target VLM model
+            # Note: image_path must be a file path, not PIL Image object
+            # So we need to save the image first if it exists
+            import time
+            temp_image_path = None
             if image:
-                # VLM query with image
-                target_response = ollama_client.query_model_with_image(
-                    model=args.target_model,
-                    prompt=text_prompt,
-                    image=image
-                )
-            else:
-                # Text-only query
-                target_response = ollama_client.query_model(
-                    model=args.target_model,
-                    prompt=text_prompt
-                )
+                # Save PIL image to temporary file
+                temp_image_path = os.path.join(run_dir, f'temp_query_{idx}.png')
+                image.save(temp_image_path)
+            
+            start_target = time.time()
+            target_response = ollama_client.query_target_model(
+                target_model_query=text_prompt,
+                query=query,
+                target_model=args.target_model,
+                image_path=temp_image_path
+            )
+            target_time = time.time() - start_target
+            
+            # # Clean up temp file
+            # if temp_image_path and os.path.exists(temp_image_path):
+            #     os.remove(temp_image_path)
             
             # Get judge score
+            start_judge = time.time()
             judge_score, judge_explanation = ollama_client.llm_judge_score(
                 query=query,
                 response=target_response,
                 unaligned_response=unaligned_response,
                 judge_model=args.judge_model
             )
+            judge_time = time.time() - start_judge
             
             # Track success (judge score >= 0.6)
             total_queries += 1
@@ -158,20 +188,36 @@ def run_baseline_evaluation(args):
             }
             results.append(result_entry)
             
-            # Update progress bar
+            # Add to query log
+            query_log.append(result_entry)
+            
+            # Save query log incrementally after each query
+            query_log_path = os.path.join(run_dir, 'query_log.json')
+            with open(query_log_path, 'w', encoding='utf-8') as f:
+                json.dump(query_log, f, indent=2)
+            
+            # Update progress bar with timing info
             pbar.set_postfix({
                 'ASR': f'{current_asr:.1%}',
-                'Success': f'{successful_attacks}/{total_queries}'
+                'Success': f'{successful_attacks}/{total_queries}',
+                'Target': f'{target_time:.1f}s',
+                'Judge': f'{judge_time:.1f}s'
             })
             pbar.update(1)
             
             # Print successful attacks
-            if is_success:
-                tqdm.write(f"✓ Successful attack #{successful_attacks} (score: {judge_score:.2f})")
+            # if is_success:
+            #     tqdm.write(f"✓ Successful attack #{successful_attacks} (score: {judge_score:.2f})")
     
     except KeyboardInterrupt:
         print("\n\nEvaluation interrupted by user (Ctrl+C)")
         print(f"Completed {total_queries} queries before interruption")
+    
+    except Exception as e:
+        print(f"\n\nERROR during evaluation: {e}")
+        import traceback
+        traceback.print_exc()
+        print(f"Completed {total_queries} queries before error")
     
     finally:
         pbar.close()
@@ -179,7 +225,12 @@ def run_baseline_evaluation(args):
         # Calculate final ASR
         final_asr = successful_attacks / max(1, total_queries)
         
-        # Save results to JSON
+        # Save detailed query log as JSON
+        query_log_path = os.path.join(run_dir, 'query_log.json')
+        with open(query_log_path, 'w', encoding='utf-8') as f:
+            json.dump(query_log, f, indent=2)
+        
+        # Save results to JSON (same as query_log for compatibility)
         results_path = os.path.join(run_dir, 'results.json')
         with open(results_path, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2)
@@ -207,6 +258,7 @@ def run_baseline_evaluation(args):
         print("="*60)
         print(f"Run Directory: {run_dir}")
         print(f"Results saved to: {results_path}")
+        print(f"Query log saved to: {query_log_path}")
         print(f"Summary saved to: {summary_path}")
         print(f"\nTotal Queries Evaluated: {total_queries}")
         print(f"Successful Attacks: {successful_attacks}")
