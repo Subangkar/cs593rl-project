@@ -62,6 +62,9 @@ def main():
     # Reward mechanism
     parser.add_argument('--use-llm-judge', action='store_true',
                         help='use LLM judge for reward (slower but more accurate)')
+    parser.add_argument('--reward-type', type=str, default='keyword',
+                        choices=['keyword', 'llm-judge', 'cosine-similarity'],
+                        help='reward calculation method: keyword (fast), llm-judge (accurate), or cosine-similarity (embedding-based)')
     
     # Pregenerated responses
     parser.add_argument('--unaligned-csv', type=str, default='dataset/prompts_harmful_responses_original_backup.csv',
@@ -417,11 +420,17 @@ def main():
                     current_avg_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0.0
                     current_update = total_steps // args.num_steps  # Calculate current update number
                     
-                    # Update progress bar with current metrics
+                    # Get timing stats from ollama client
+                    timing_stats = envs[0].ollama_client.get_timing_stats()
+                    
+                    # Update progress bar with current metrics and timings
                     pbar.set_postfix({
                         'update': f'{current_update}/{num_updates}',
                         'reward': f'{current_avg_reward:.3f}',
                         'ASR': f'{current_asr:.1%}',
+                        'mut_t': f"{timing_stats['mutator']:.1f}s",
+                        'tgt_t': f"{timing_stats['target']:.1f}s",
+                        'jdg_t': f"{timing_stats['judge']:.1f}s"
                     })
                     
                     tqdm.write(f"[Step {total_steps + args.num_processes}] Running ASR: {current_asr:.2%} ({current_successful}/{current_total})")
@@ -507,13 +516,19 @@ def main():
             asr_log_file.flush()
             first_asr_entry = False
             
+            # Get timing stats
+            timing_stats = envs[0].ollama_client.get_timing_stats()
+            
             # Update progress bar with metrics EVERY update
             pbar.set_postfix({
                 'update': f'{update}/{num_updates}',
                 'reward': f'{avg_reward:.3f}',
                 'ASR': f'{combined_asr:.1%}',
                 'v_loss': f'{value_loss:.3f}',
-                'a_loss': f'{action_loss:.3f}'
+                'a_loss': f'{action_loss:.3f}',
+                'mut_t': f"{timing_stats['mutator']:.1f}s",
+                'tgt_t': f"{timing_stats['target']:.1f}s",
+                'jdg_t': f"{timing_stats['judge']:.1f}s"
             })
             
             # Detailed console logging every log_interval updates

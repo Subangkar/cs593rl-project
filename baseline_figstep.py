@@ -139,7 +139,7 @@ def run_baseline_evaluation(args):
             temp_image_path = None
             if image:
                 # Save PIL image to temporary file
-                temp_image_path = os.path.join(run_dir, f'temp_query_{idx}.png')
+                temp_image_path = os.path.join(run_dir, f'temp_query.png')
                 image.save(temp_image_path)
             
             start_target = time.time()

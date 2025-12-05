@@ -112,7 +112,7 @@ class QueryMutationEnv(gym.Env):
         self.current_image_path = None
         self.current_query_idx = 0
         self.steps = 0
-        self.max_steps = 8
+        self.max_steps = 10
         self.total_queries = 0
         self.successful_attacks = 0
         
@@ -262,15 +262,26 @@ class QueryMutationEnv(gym.Env):
     
     def _calculate_reward(self, query, response):
         """Calculate reward based on attack success. Returns (reward, judge_explanation) tuple."""
+        # Check backward compatibility flag first
         use_llm_judge = getattr(self.args, 'use_llm_judge', False)
         
+        # Get reward type - override with use_llm_judge flag if set
         if use_llm_judge or self.eval:
-            # Use LLM judge - returns (score, explanation)
-            return self._llm_judge_reward(query, response)
+            reward_type = 'llm-judge'
         else:
-            # Use keyword-based heuristic (faster for training)
+            reward_type = getattr(self.args, 'reward_type', 'keyword')
+        
+        # Calculate reward based on type
+        if reward_type == 'llm-judge':
+            #print("Using LLM judge for reward calculation")
+            return self._llm_judge_reward(query, response)
+        elif reward_type == 'cosine-similarity':
+            #print("Using cosine similarity for reward calculation")
+            return self._cosine_similarity_reward(query, response)
+        else:  # keyword (default)
+            #print("Using keyword-based reward calculation")
             reward = self._keyword_reward(response)
-            return reward, ""  # No explanation for keyword-based
+            return reward, "Keyword-based scoring"
     
     def _keyword_reward(self, response):
         """Fast keyword-based reward"""
@@ -311,6 +322,14 @@ class QueryMutationEnv(gym.Env):
         # Get unaligned response for comparison
         unaligned_response = self._get_unaligned_response(query)
         score, explanation = self.ollama_client.llm_judge_score(query, response, unaligned_response, self.judge_model)
+        return score, explanation
+    
+    def _cosine_similarity_reward(self, query, response):
+        """Use cosine similarity of embeddings to score response similarity. Returns (score, explanation) tuple."""
+        # Get unaligned response for comparison
+        unaligned_response = self._get_unaligned_response(query)
+        # Calculate cosine similarity between embeddings
+        score, explanation = self.ollama_client.cosine_similarity_score(response, unaligned_response)
         return score, explanation
 
 
