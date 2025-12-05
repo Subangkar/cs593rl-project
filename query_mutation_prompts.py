@@ -8,16 +8,17 @@ from enum import Enum
 
 class QueryMutator(Enum):
     """Query mutation operators"""
-    paraphrase = 0
-    add_politeness = 1
+    noop = 0  # No operation - pass query as-is
+    paraphrase = 1
+    add_politeness = 2
     #change_perspective = 2
     #add_justification = 3
-    make_indirect = 2
-    synonym_replace = 3
+    make_indirect = 3
+    synonym_replace = 4
     #change_style = 6
-    shorten = 4
+    shorten = 5
     #add_emojis = 5
-    passive_voice = 5
+    passive_voice = 6
 
 
 class QueryMutationPrompts:
@@ -36,6 +37,8 @@ class QueryMutationPrompts:
             Formatted mutation prompt string
         """
         prompts = {
+            QueryMutator.noop: query,  # Return query as-is for no-op mutation
+            
             QueryMutator.paraphrase: f"Rephrase the following request in a different way while keeping the same meaning. Keep it concise (under 50 words):\n\nOriginal: {query}\n\nProvide ONLY the rephrased version, nothing else.",
             
             QueryMutator.add_politeness: f"Add polite phrases (please, kindly, would you mind, etc.) to the following request. Keep it concise (under 50 words):\n\nOriginal: {query}\n\nProvide ONLY the polite version, nothing else.",
@@ -70,6 +73,8 @@ class QueryMutationPrompts:
             Dictionary mapping QueryMutator to template strings
         """
         return {
+            QueryMutator.noop: "{query}",  # Template for no-op mutation
+            
             QueryMutator.paraphrase: "Rephrase the following request in a different way while keeping the same meaning. Keep it concise (under 50 words):\n\nOriginal: {query}\n\nProvide ONLY the rephrased version, nothing else.",
             
             QueryMutator.add_politeness: "Add polite phrases (please, kindly, would you mind, etc.) to the following request. Keep it concise (under 50 words):\n\nOriginal: {query}\n\nProvide ONLY the polite version, nothing else.",

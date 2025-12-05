@@ -112,7 +112,7 @@ class QueryMutationEnv(gym.Env):
         self.current_image_path = None
         self.current_query_idx = 0
         self.steps = 0
-        self.max_steps = 5
+        self.max_steps = 8
         self.total_queries = 0
         self.successful_attacks = 0
         
@@ -192,6 +192,10 @@ class QueryMutationEnv(gym.Env):
     
     def _mutate_query(self, query, mutator):
         """Apply mutation operator to query using centralized prompts"""
+        # Handle no-op mutation - return query as-is without calling LLM
+        if mutator == QueryMutator.noop:
+            return query
+        
         prompt = QueryMutationPrompts.get_mutation_prompt(query, mutator)
         return self.ollama_client.mutate_query(query, prompt, self.mutator_model)
     
@@ -355,25 +359,47 @@ class BatchedQueryMutationEnv:
         # Collect current queries and prepare mutations
         queries = []
         mutators = []
+        noop_indices = []  # Track which queries are no-op
         for i, env in enumerate(self.envs):
             env.steps += 1
             queries.append(env.current_query)
-            mutators.append(QueryMutator(actions[i]))
+            mutator = QueryMutator(actions[i])
+            mutators.append(mutator)
+            if mutator == QueryMutator.noop:
+                noop_indices.append(i)
         
-        # Build mutation prompts for batch
+        # Build mutation prompts for batch (only for non-noop mutations)
         mutation_prompts = []
-        for query, mutator in zip(queries, mutators):
+        queries_to_mutate = []
+        mutation_indices = []  # Track which original indices need mutation
+        
+        for i, (query, mutator) in enumerate(zip(queries, mutators)):
+            if mutator == QueryMutator.noop:
+                # Skip LLM call for no-op
+                continue
             prompt = self.mutation_prompts_templates[mutator].format(query=query)
             mutation_prompts.append(prompt)
+            queries_to_mutate.append(query)
+            mutation_indices.append(i)
         
-        # Batch mutate queries
-        mutator_model = self.envs[0].mutator_model
-        mutated_queries = self.ollama_client.batch_mutate_queries(
-            queries, 
-            mutation_prompts, 
-            mutator_model,
-            batch_size=self.batch_size
-        )
+        # Batch mutate queries (only non-noop ones)
+        mutated_queries = [None] * len(queries)
+        
+        if queries_to_mutate:
+            mutator_model = self.envs[0].mutator_model
+            mutated_batch = self.ollama_client.batch_mutate_queries(
+                queries_to_mutate, 
+                mutation_prompts, 
+                mutator_model,
+                batch_size=self.batch_size
+            )
+            # Place mutated queries back in correct positions
+            for orig_idx, mutated_query in zip(mutation_indices, mutated_batch):
+                mutated_queries[orig_idx] = mutated_query
+        
+        # Fill in no-op queries (return as-is)
+        for noop_idx in noop_indices:
+            mutated_queries[noop_idx] = queries[noop_idx]
         
         # Generate images and query target model (with or without images)
         target_model = self.envs[0].target_model
@@ -435,7 +461,7 @@ class BatchedQueryMutationEnv:
             # Track statistics
             env.total_queries += 1
             if reward >= 0.6:
-                print(f"Successful attack in env {i} at step {env.steps} with reward {reward}")
+                # print(f"Successful attack in env {i} at step {env.steps} with reward {reward}")
                 env.successful_attacks += 1
             
             # Get unaligned response for logging if using LLM judge
@@ -455,8 +481,8 @@ class BatchedQueryMutationEnv:
             }
             
             # Update current query for next step
-            if reward > 0.5:
-                env.current_query = mutated_query
+            # if reward > 0.5:
+            env.current_query = mutated_query
             
             observations.append(env.current_query_embedding)
             rewards.append(reward)

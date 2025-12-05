@@ -13,6 +13,7 @@ from pathlib import Path
 from tqdm import tqdm
 import json
 from datetime import datetime
+from torch.utils.tensorboard import SummaryWriter
 
 # Import RL core components
 from rl_core import PPO, Policy, RolloutStorage
@@ -31,10 +32,10 @@ def main():
                         help='total environment steps (default: 10000)')
     
     # PPO parameters
-    parser.add_argument('--lr', type=float, default=3e-4,
-                        help='learning rate (default: 3e-4)')
-    parser.add_argument('--gamma', type=float, default=0.99,
-                        help='discount factor (default: 0.99)')
+    parser.add_argument('--lr', type=float, default=5e-4,
+                        help='learning rate (default: 5e-4)')
+    parser.add_argument('--gamma', type=float, default=0.95,
+                        help='discount factor (default: 0.95)')
     parser.add_argument('--clip-param', type=float, default=0.2,
                         help='PPO clip parameter (default: 0.2)')
     parser.add_argument('--ppo-epoch', type=int, default=4,
@@ -43,8 +44,8 @@ def main():
                         help='number of mini-batches (default: 4)')
     parser.add_argument('--value-loss-coef', type=float, default=0.5,
                         help='value loss coefficient (default: 0.5)')
-    parser.add_argument('--entropy-coef', type=float, default=0.01,
-                        help='entropy coefficient (default: 0.01)')
+    parser.add_argument('--entropy-coef', type=float, default=0.03,
+                        help='entropy coefficient (default: 0.03)')
     parser.add_argument('--max-grad-norm', type=float, default=0.5,
                         help='max norm of gradients (default: 0.5)')
     
@@ -143,6 +144,13 @@ def main():
     
     # Update save_dir to use the timestamped run directory
     args.save_dir = run_dir
+    
+    # Create TensorBoard writer
+    tensorboard_dir = os.path.join(run_dir, 'tensorboard')
+    writer = SummaryWriter(log_dir=tensorboard_dir)
+    print(f"TensorBoard logs: {tensorboard_dir}")
+    print(f"Run: tensorboard --logdir {tensorboard_dir} --port 6006")
+    print("-" * 60)
     
     # Save run configuration to separate log file
     config_path = os.path.join(run_dir, 'run.log')
@@ -447,10 +455,22 @@ def main():
             avg_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0.0
             avg_length = np.mean(episode_lengths[-100:]) if episode_lengths else 0.0
             
+            # Log to TensorBoard (update-wise, using total_steps as x-axis)
+            writer.add_scalar('Training/Episode_Reward', avg_reward, total_steps)
+            writer.add_scalar('Training/Episode_Length', avg_length, total_steps)
+            writer.add_scalar('Loss/Value_Loss', value_loss, total_steps)
+            writer.add_scalar('Loss/Action_Loss', action_loss, total_steps)
+            writer.add_scalar('Loss/Entropy', dist_entropy, total_steps)
+            
             # Calculate combined ASR across all environments
             total_successful = sum(env.successful_attacks for env in envs)
             total_queries_all = sum(env.total_queries for env in envs)
             combined_asr = total_successful / max(1, total_queries_all)
+            
+            # Log combined ASR to TensorBoard
+            writer.add_scalar('Training/Combined_ASR', combined_asr, total_steps)
+            writer.add_scalar('Training/Total_Successful_Attacks', total_successful, total_steps)
+            writer.add_scalar('Training/Total_Queries', total_queries_all, total_steps)
             
             # Calculate per-environment ASR
             per_env_asr = []
@@ -464,6 +484,10 @@ def main():
                     'total_queries': env.total_queries,
                     'asr': env_asr
                 })
+                # Log per-environment ASR to TensorBoard
+                writer.add_scalar(f'ASR/Environment_{i}', env_asr, total_steps)
+                writer.add_scalar(f'Attacks/Environment_{i}_Successful', env.successful_attacks, total_steps)
+                writer.add_scalar(f'Attacks/Environment_{i}_Total', env.total_queries, total_steps)
             
             # Log ASR to separate file EVERY update
             asr_entry = {
@@ -542,6 +566,10 @@ def main():
         json_file.close()
         asr_log_file.write('\n]')
         asr_log_file.close()
+        
+        # Close TensorBoard writer
+        writer.close()
+        print(f"TensorBoard logs saved to {tensorboard_dir}")
         
         # Calculate final ASR statistics
         total_successful = sum(env.successful_attacks for env in envs)
