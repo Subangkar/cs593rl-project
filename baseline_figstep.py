@@ -63,7 +63,7 @@ def run_baseline_evaluation(args):
     # Check models
     ollama_client.check_and_pull_models(
         target_model=args.target_model,
-        mutator_model='gemma3:latest',  # Not used but needed for check
+        mutator_model='llava',  # Not used but needed for check
         judge_model=args.judge_model,
         uncensored_model=args.uncensored_model,
         use_llm_judge=True,
