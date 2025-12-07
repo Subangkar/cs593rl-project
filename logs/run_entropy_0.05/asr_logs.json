@@ -1,0 +1,529 @@
+[
+{
+  "update": 0,
+  "total_steps": 32,
+  "combined_asr": 0.28125,
+  "total_successful_attacks": 9,
+  "total_queries": 32,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 9,
+      "total_queries": 32,
+      "asr": 0.28125
+    }
+  ],
+  "avg_reward": 0.4000000000000001,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 1,
+  "total_steps": 64,
+  "combined_asr": 0.234375,
+  "total_successful_attacks": 15,
+  "total_queries": 64,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 15,
+      "total_queries": 64,
+      "asr": 0.234375
+    }
+  ],
+  "avg_reward": 0.4166666666666667,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 2,
+  "total_steps": 96,
+  "combined_asr": 0.2708333333333333,
+  "total_successful_attacks": 26,
+  "total_queries": 96,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 26,
+      "total_queries": 96,
+      "asr": 0.2708333333333333
+    }
+  ],
+  "avg_reward": 0.4555555555555556,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 3,
+  "total_steps": 128,
+  "combined_asr": 0.2890625,
+  "total_successful_attacks": 37,
+  "total_queries": 128,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 37,
+      "total_queries": 128,
+      "asr": 0.2890625
+    }
+  ],
+  "avg_reward": 0.4416666666666667,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 4,
+  "total_steps": 160,
+  "combined_asr": 0.3625,
+  "total_successful_attacks": 58,
+  "total_queries": 160,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 58,
+      "total_queries": 160,
+      "asr": 0.3625
+    }
+  ],
+  "avg_reward": 0.48125,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 5,
+  "total_steps": 192,
+  "combined_asr": 0.359375,
+  "total_successful_attacks": 69,
+  "total_queries": 192,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 69,
+      "total_queries": 192,
+      "asr": 0.359375
+    }
+  ],
+  "avg_reward": 0.4973684210526315,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 6,
+  "total_steps": 224,
+  "combined_asr": 0.3794642857142857,
+  "total_successful_attacks": 85,
+  "total_queries": 224,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 85,
+      "total_queries": 224,
+      "asr": 0.3794642857142857
+    }
+  ],
+  "avg_reward": 0.5113636363636362,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 7,
+  "total_steps": 256,
+  "combined_asr": 0.38671875,
+  "total_successful_attacks": 99,
+  "total_queries": 256,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 99,
+      "total_queries": 256,
+      "asr": 0.38671875
+    }
+  ],
+  "avg_reward": 0.51,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 8,
+  "total_steps": 288,
+  "combined_asr": 0.3958333333333333,
+  "total_successful_attacks": 114,
+  "total_queries": 288,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 114,
+      "total_queries": 288,
+      "asr": 0.3958333333333333
+    }
+  ],
+  "avg_reward": 0.5089285714285714,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 9,
+  "total_steps": 320,
+  "combined_asr": 0.384375,
+  "total_successful_attacks": 123,
+  "total_queries": 320,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 123,
+      "total_queries": 320,
+      "asr": 0.384375
+    }
+  ],
+  "avg_reward": 0.5109374999999999,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 10,
+  "total_steps": 352,
+  "combined_asr": 0.375,
+  "total_successful_attacks": 132,
+  "total_queries": 352,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 132,
+      "total_queries": 352,
+      "asr": 0.375
+    }
+  ],
+  "avg_reward": 0.49571428571428566,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 11,
+  "total_steps": 384,
+  "combined_asr": 0.3645833333333333,
+  "total_successful_attacks": 140,
+  "total_queries": 384,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 140,
+      "total_queries": 384,
+      "asr": 0.3645833333333333
+    }
+  ],
+  "avg_reward": 0.4986842105263157,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 12,
+  "total_steps": 416,
+  "combined_asr": 0.3629807692307692,
+  "total_successful_attacks": 151,
+  "total_queries": 416,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 151,
+      "total_queries": 416,
+      "asr": 0.3629807692307692
+    }
+  ],
+  "avg_reward": 0.4958536585365854,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 13,
+  "total_steps": 448,
+  "combined_asr": 0.3638392857142857,
+  "total_successful_attacks": 163,
+  "total_queries": 448,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 163,
+      "total_queries": 448,
+      "asr": 0.3638392857142857
+    }
+  ],
+  "avg_reward": 0.5063636363636363,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 14,
+  "total_steps": 480,
+  "combined_asr": 0.36041666666666666,
+  "total_successful_attacks": 173,
+  "total_queries": 480,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 173,
+      "total_queries": 480,
+      "asr": 0.36041666666666666
+    }
+  ],
+  "avg_reward": 0.506875,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 15,
+  "total_steps": 512,
+  "combined_asr": 0.35546875,
+  "total_successful_attacks": 182,
+  "total_queries": 512,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 182,
+      "total_queries": 512,
+      "asr": 0.35546875
+    }
+  ],
+  "avg_reward": 0.5103921568627451,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 16,
+  "total_steps": 544,
+  "combined_asr": 0.3584558823529412,
+  "total_successful_attacks": 195,
+  "total_queries": 544,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 195,
+      "total_queries": 544,
+      "asr": 0.3584558823529412
+    }
+  ],
+  "avg_reward": 0.5144444444444444,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 17,
+  "total_steps": 576,
+  "combined_asr": 0.3628472222222222,
+  "total_successful_attacks": 209,
+  "total_queries": 576,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 209,
+      "total_queries": 576,
+      "asr": 0.3628472222222222
+    }
+  ],
+  "avg_reward": 0.5189473684210526,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 18,
+  "total_steps": 608,
+  "combined_asr": 0.3618421052631579,
+  "total_successful_attacks": 220,
+  "total_queries": 608,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 220,
+      "total_queries": 608,
+      "asr": 0.3618421052631579
+    }
+  ],
+  "avg_reward": 0.5063333333333333,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 19,
+  "total_steps": 640,
+  "combined_asr": 0.3703125,
+  "total_successful_attacks": 237,
+  "total_queries": 640,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 237,
+      "total_queries": 640,
+      "asr": 0.3703125
+    }
+  ],
+  "avg_reward": 0.5231250000000001,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 20,
+  "total_steps": 672,
+  "combined_asr": 0.3705357142857143,
+  "total_successful_attacks": 249,
+  "total_queries": 672,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 249,
+      "total_queries": 672,
+      "asr": 0.3705357142857143
+    }
+  ],
+  "avg_reward": 0.5176119402985075,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 21,
+  "total_steps": 704,
+  "combined_asr": 0.37642045454545453,
+  "total_successful_attacks": 265,
+  "total_queries": 704,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 265,
+      "total_queries": 704,
+      "asr": 0.37642045454545453
+    }
+  ],
+  "avg_reward": 0.5297142857142859,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 22,
+  "total_steps": 736,
+  "combined_asr": 0.3736413043478261,
+  "total_successful_attacks": 275,
+  "total_queries": 736,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 275,
+      "total_queries": 736,
+      "asr": 0.3736413043478261
+    }
+  ],
+  "avg_reward": 0.533972602739726,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 23,
+  "total_steps": 768,
+  "combined_asr": 0.3763020833333333,
+  "total_successful_attacks": 289,
+  "total_queries": 768,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 289,
+      "total_queries": 768,
+      "asr": 0.3763020833333333
+    }
+  ],
+  "avg_reward": 0.5273684210526316,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 24,
+  "total_steps": 800,
+  "combined_asr": 0.375,
+  "total_successful_attacks": 300,
+  "total_queries": 800,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 300,
+      "total_queries": 800,
+      "asr": 0.375
+    }
+  ],
+  "avg_reward": 0.5385,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 25,
+  "total_steps": 832,
+  "combined_asr": 0.3786057692307692,
+  "total_successful_attacks": 315,
+  "total_queries": 832,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 315,
+      "total_queries": 832,
+      "asr": 0.3786057692307692
+    }
+  ],
+  "avg_reward": 0.5371084337349398,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 26,
+  "total_steps": 864,
+  "combined_asr": 0.37962962962962965,
+  "total_successful_attacks": 328,
+  "total_queries": 864,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 328,
+      "total_queries": 864,
+      "asr": 0.37962962962962965
+    }
+  ],
+  "avg_reward": 0.5323255813953488,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 27,
+  "total_steps": 896,
+  "combined_asr": 0.38504464285714285,
+  "total_successful_attacks": 345,
+  "total_queries": 896,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 345,
+      "total_queries": 896,
+      "asr": 0.38504464285714285
+    }
+  ],
+  "avg_reward": 0.5329213483146067,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 28,
+  "total_steps": 928,
+  "combined_asr": 0.37823275862068967,
+  "total_successful_attacks": 351,
+  "total_queries": 928,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 351,
+      "total_queries": 928,
+      "asr": 0.37823275862068967
+    }
+  ],
+  "avg_reward": 0.5307608695652174,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 29,
+  "total_steps": 960,
+  "combined_asr": 0.375,
+  "total_successful_attacks": 360,
+  "total_queries": 960,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 360,
+      "total_queries": 960,
+      "asr": 0.375
+    }
+  ],
+  "avg_reward": 0.5398958333333334,
+  "avg_episode_length": 10.0
+},
+{
+  "update": 30,
+  "total_steps": 992,
+  "combined_asr": 0.3719758064516129,
+  "total_successful_attacks": 369,
+  "total_queries": 992,
+  "per_environment": [
+    {
+      "env_id": 0,
+      "successful_attacks": 369,
+      "total_queries": 992,
+      "asr": 0.3719758064516129
+    }
+  ],
+  "avg_reward": 0.5381818181818182,
+  "avg_episode_length": 10.0
+}
+]

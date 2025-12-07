@@ -1,0 +1,46 @@
+============================================================
+Run Configuration
+============================================================
+Timestamp: 20251206_112033
+Run Directory: logs/run_20251206_112033
+
+Models:
+  Target Model: gemma3:4b
+  Mutator Model: gemma3:latest
+  Judge Model: deepseek-r1:14b
+  Uncensored Model: wizard-vicuna-uncensored
+
+Training Parameters:
+  Num Env Steps: 1000
+  Num Steps: 32
+  Num Processes: 1
+  Learning Rate: 0.0005
+  Gamma: 0.95
+  PPO Epochs: 2
+  Num Mini Batch: 4
+  Clip Param: 0.2
+  Value Loss Coef: 0.5
+  Entropy Coef: 0.03
+  Max Grad Norm: 0.5
+
+Reward & Dataset:
+  Use LLM Judge: True
+  Unaligned CSV: dataset/prompts_harmful_responses_original_backup.csv
+  Use Unified CSV: True
+  Fraction Samples: 1.0
+
+Batching:
+  Use Batching: True
+  Batch Size: 128
+
+Image-Based Prompts:
+  Use Image Prompts: True
+  Image Style: stepwise
+  Save Images: False
+
+Other:
+  Device: cuda
+  Seed: 42
+  Save Interval: 100
+  Log Interval: 10
+============================================================
