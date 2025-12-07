@@ -54,19 +54,14 @@ class QueryMutationEnv(gym.Env):
         else:
             self.image_converter = None
         
-        # Initialize dataset loader
-        dataset_loader = DatasetLoader(dataset_path="dataset/prompts_harmful_responses.csv", seed=42)
-        
-        # Load queries and pregenerated responses
-        frac_samples = getattr(args, 'frac_samples', 1.0)
-        unaligned_csv = getattr(args, 'unaligned_csv', 'dataset/prompts_harmful_responses.csv')
-        use_unified_csv = getattr(args, 'use_unified_csv', True)
+        # Initialize dataset loader and load from unified CSV file
+        dataset_loader = DatasetLoader(seed=42)
         
         self.queries_pool, self.pregenerated_responses, sampled_indices = dataset_loader.load_dataset(
             eval=eval,
-            frac_samples=frac_samples,
-            unaligned_csv=unaligned_csv,
-            use_unified_csv=use_unified_csv,
+            frac_samples=args.frac_samples,
+            unaligned_csv=args.dataset,
+            use_unified_csv=True,
             verbose=True
         )
         

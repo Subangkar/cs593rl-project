@@ -62,17 +62,13 @@ def main():
     # Reward mechanism
     parser.add_argument('--use-llm-judge', action='store_true',
                         help='use LLM judge for reward (slower but more accurate)')
-    parser.add_argument('--reward-type', type=str, default='judge',
+    parser.add_argument('--reward-type', type=str, default='llm-judge',
                         choices=['keyword', 'llm-judge', 'cosine-similarity'],
                         help='reward calculation method: keyword (fast), llm-judge (accurate), or cosine-similarity (embedding-based)')
     
-    # Pregenerated responses
-    parser.add_argument('--unaligned-csv', type=str, default='dataset/prompts_harmful_responses_original_backup.csv',
-                        help='CSV file with pregenerated unaligned responses')
-    parser.add_argument('--use-unified-csv', action='store_true', default=True,
-                        help='load both queries and responses from the same CSV file (unaligned-csv)')
-    
-    # Dataset sampling
+    # Dataset
+    parser.add_argument('--dataset', type=str, default='dataset/prompts_harmful_responses_train.csv',
+                        help='CSV file with queries and unaligned responses (unified format)')
     parser.add_argument('--frac-samples', type=float, default=1.0,
                         help='fraction of dataset to randomly sample (0.0-1.0, default: 1.0 = all data)')
     
@@ -189,8 +185,7 @@ def main():
         config_file.write("\n")
         config_file.write("Reward & Dataset:\n")
         config_file.write(f"  Use LLM Judge: {args.use_llm_judge}\n")
-        config_file.write(f"  Unaligned CSV: {args.unaligned_csv}\n")
-        config_file.write(f"  Use Unified CSV: {args.use_unified_csv}\n")
+        config_file.write(f"  Dataset: {args.dataset}\n")
         config_file.write(f"  Fraction Samples: {args.frac_samples}\n")
         config_file.write("\n")
         config_file.write("Batching:\n")
