@@ -62,7 +62,7 @@ def main():
     # Reward mechanism
     parser.add_argument('--use-llm-judge', action='store_true',
                         help='use LLM judge for reward (slower but more accurate)')
-    parser.add_argument('--reward-type', type=str, default='keyword',
+    parser.add_argument('--reward-type', type=str, default='judge',
                         choices=['keyword', 'llm-judge', 'cosine-similarity'],
                         help='reward calculation method: keyword (fast), llm-judge (accurate), or cosine-similarity (embedding-based)')
     
@@ -79,8 +79,8 @@ def main():
     # Checkpoint
     parser.add_argument('--save-dir', type=str, default='./trained_models_query_mutator',
                         help='directory to save checkpoints')
-    parser.add_argument('--save-interval', type=int, default=100,
-                        help='save model every N updates')
+    parser.add_argument('--save-interval', type=int, default=1000,
+                        help='save model every N steps (across all environments)')
     parser.add_argument('--log-interval', type=int, default=10,
                         help='log info every N updates')
     
@@ -145,8 +145,12 @@ def main():
     run_dir = os.path.join('logs', f'run_{timestamp}')
     os.makedirs(run_dir, exist_ok=True)
     
-    # Update save_dir to use the timestamped run directory
-    args.save_dir = run_dir
+    # Create separate checkpoints directory
+    checkpoints_dir = os.path.join(run_dir, 'checkpoints')
+    os.makedirs(checkpoints_dir, exist_ok=True)
+    
+    # Update save_dir to use the checkpoints directory
+    args.save_dir = checkpoints_dir
     
     # Create TensorBoard writer
     tensorboard_dir = os.path.join(run_dir, 'tensorboard')
@@ -204,6 +208,9 @@ def main():
         config_file.write(f"  Save Interval: {args.save_interval}\n")
         config_file.write(f"  Log Interval: {args.log_interval}\n")
         config_file.write("=" * 60 + "\n")
+        config_file.write("Saved Model Directory:\n")
+        config_file.write(f"  {args.save_dir}\n")
+        config_file.write("=" * 60 + "\n")
     
     # Create JSON log file for training events
     json_path = os.path.join(run_dir, 'training_log.json')
@@ -216,6 +223,8 @@ def main():
     asr_log_file = open(asr_log_path, 'w', encoding='utf-8')
     asr_log_file.write('[\n')  # Start JSON array
     first_asr_entry = True
+
+    os.makedirs(args.save_dir, exist_ok=True)
     
     print("="*60)
     print("RL Query Mutation Training")
@@ -335,6 +344,7 @@ def main():
     episode_lengths = []
     total_steps = 0
     episode_count = 0
+    last_save_step = 0  # Track last checkpoint save
     
     # Create progress bar
     pbar = tqdm(total=args.num_env_steps, desc="Training", unit="steps")
@@ -445,6 +455,22 @@ def main():
                 
                 total_steps += args.num_processes
                 pbar.update(args.num_processes)
+                
+                # FORCE SAVE: Save checkpoint every save_interval steps
+                should_save = (args.save_interval > 0 and total_steps >= last_save_step + args.save_interval)
+                if should_save:
+                    save_path = os.path.join(args.save_dir, f'checkpoint_step_{total_steps}.pt')
+                    print(f"\n[DEBUG] Saving checkpoint at step {total_steps} to {save_path}")
+                    torch.save({
+                        'total_steps': total_steps,
+                        'update': update,
+                        'model_state_dict': actor_critic.state_dict(),
+                        'optimizer_state_dict': agent.optimizer.state_dict(),
+                        'avg_reward': np.mean(episode_rewards[-100:]) if episode_rewards else 0.0,
+                    }, save_path)
+                    last_save_step = total_steps
+                    print(f"✓ SAVED checkpoint to {save_path}\n")
+                    tqdm.write(f"✓ Saved checkpoint at step {total_steps}")
             
             # Compute returns
             with torch.no_grad():
@@ -545,17 +571,6 @@ def main():
                 tqdm.write(f"  Action Loss: {action_loss:.4f}")
                 tqdm.write(f"  Entropy: {dist_entropy:.4f}")
                 tqdm.write(f"{'='*60}")
-            
-            # Save checkpoint
-            if update % args.save_interval == 0 and update > 0:
-                save_path = os.path.join(args.save_dir, f'checkpoint_{update}.pt')
-                torch.save({
-                    'update': update,
-                    'model_state_dict': actor_critic.state_dict(),
-                    'optimizer_state_dict': agent.optimizer.state_dict(),
-                    'avg_reward': np.mean(episode_rewards[-100:]) if episode_rewards else 0.0,
-                }, save_path)
-                tqdm.write(f"Saved checkpoint to {save_path}")
     
     except KeyboardInterrupt:
         print("\n\n" + "="*60)
@@ -574,6 +589,8 @@ def main():
             'model_state_dict': actor_critic.state_dict(),
             'avg_reward': np.mean(episode_rewards[-100:]) if episode_rewards else 0.0,
             'total_steps': total_steps,
+            'combined_asr': combined_asr,
+
         }, final_path)
         
         # Close JSON arrays
