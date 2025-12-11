@@ -235,7 +235,7 @@ class OllamaClient:
         Returns:
             Model response text
         """
-        #print(target_model_query)
+        print(target_model_query)
         import time
         start_time = time.time()
         try:
@@ -249,9 +249,9 @@ class OllamaClient:
                 message["images"] = [image_path]
             
             
-            # print(f"Querying target model '{target_model}'...")
-            # print(f"Prompt: {target_model_query}")
-            #print(f"Message: {message}")
+            print(f"Querying target model '{target_model}'...")
+            print(f"Prompt: {target_model_query}")
+            print(f"Message: {message}")
             result = self.client.chat(
                 model=target_model,
                 messages=[message],

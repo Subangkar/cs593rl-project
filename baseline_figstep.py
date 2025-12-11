@@ -272,7 +272,7 @@ def main():
     parser = argparse.ArgumentParser(description='FigStep Baseline Evaluation')
     
     # Model parameters
-    parser.add_argument('--target-model', type=str, default='gemma3:4b',
+    parser.add_argument('--target-model', type=str, default='llava:latest',
                         help='target VLM model to attack')
     parser.add_argument('--judge-model', type=str, default='deepseek-r1:14b',
                         help='model for judging responses')
@@ -281,7 +281,7 @@ def main():
     
     # Dataset parameters
     parser.add_argument('--dataset-csv', type=str, 
-                        default='dataset/prompts_harmful_responses_original_backup.csv',
+                        default='dataset/prompts_harmful_responses_test.csv',
                         help='CSV file with queries and unaligned responses')
     parser.add_argument('--frac-samples', type=float, default=1.0,
                         help='fraction of dataset to evaluate (0.0-1.0, default: 1.0 = all)')

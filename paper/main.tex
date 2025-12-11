@@ -1,0 +1,554 @@
+\documentclass{article}
+
+% NeurIPS style
+\usepackage[final]{neurips_2024}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{multirow}
+\usepackage{subcaption}
+
+\usepackage{svg}
+
+% Title
+\title{Exploration of RL for Jailbreaking Attack on VLMs}
+
+% Authors
+\author{%
+  Md Ajwad Akil$^{\ast}$, Preetom Saha Arko$^{\ast}$, Subangkar Karmaker Shanto$^{\ast}$ \\
+  Department of Computer Science, Purdue University \\
+  \texttt{\{makil, arko, sshanto\}@purdue.edu}
+  % \footnote{Authors are sorted alphabetically by name.}
+% \thanks{$^{\ast}$Author names are listed in alphabetical order.}
+\\[0.75ex]
+\textit{$^{\ast}$Author names are listed in alphabetical order}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Large Vision-Language Models (LVLMs) have achieved remarkable performance across multimodal tasks, yet they remain vulnerable to typographic attacks where harmful text embedded in images bypasses safety alignments. We present a reinforcement learning framework that automates the generation of effective typographic jailbreak attacks by learning adaptive prompt mutation strategies. Unlike existing static methods like FigStep that simply render text as images, our approach formulates jailbreak generation as a Markov Decision Process and employs Proximal Policy Optimization (PPO) to train an agent that strategically selects text mutations before rendering them typographically. The agent learns to choose from multiple mutation operators including paraphrasing, politeness injection, indirection, synonym replacement, and no-operation, discovering which transformations are most effective for bypassing visual modality safety filters. We evaluate our approach on the SafeBench dataset against multiple target VLMs including LLaVA and Gemma variants, using both embedding-based similarity metrics and an LLM-as-judge framework for robust evaluation. Extensive experiments demonstrate that our RL-guided approach significantly outperforms the FigStep baseline and random mutation strategies, achieving higher attack success rates while requiring fewer queries. Our findings reveal critical vulnerabilities in the visual input pathway of current VLMs and highlight the modal disconnect in multimodal safety training. This work contributes an automated red-teaming tool for VLM security evaluation and provides insights for developing more robust cross-modal alignment techniques.
+\end{abstract}
+
+\section{Introduction}
+
+The integration of vision and language capabilities in Large Vision-Language Models (LVLMs) such as GPT-4V, LLaVA \cite{liu2024llava}, and Gemma-Vision has enabled unprecedented multimodal understanding across applications in visual question answering, image captioning, and embodied AI. However, recent work has uncovered a critical vulnerability in these models: typographic attacks where harmful text embedded within images systematically bypasses safety mechanisms that successfully block the same text-only prompts \cite{cheng2024unveiling, gong2024figstep}. This ``modal disconnect'' in safety training poses significant risks as VLMs are increasingly deployed in sensitive real-world applications.
+
+Existing typographic attack methods like FigStep \cite{gong2024figstep} demonstrate high attack success rates by simply rendering prohibited queries as text within images. However, these approaches are static. They apply fixed rendering strategies without adapting to model-specific vulnerabilities or learning from attack outcomes. While effective as proof-of-concept, they leave substantial room for optimization through adaptive mutation strategies that could systematically explore the space of typographic variations.
+
+To address this gap, we propose a reinforcement learning framework that automates and optimizes typographic jailbreak generation through learned prompt mutation policies. Our key insight is that effective typographic attacks can be enhanced through strategic text transformations before rendering: an RL agent learns which linguistic mutations (paraphrasing, politeness injection, indirection, etc.) maximize attack success when combined with typographic presentation. Unlike text-only jailbreaks, our mutations target the visual modality's safety weaknesses while preserving semantic malicious intent.
+
+\subsection{Contributions}
+
+Our work makes the following contributions:
+
+\begin{itemize}
+    \item \textbf{RL Framework for Typographic Attacks}: We formulate typographic jailbreak generation as a Markov Decision Process and develop a PPO-based agent that learns optimal text mutation policies before typographic rendering, extending static approaches like FigStep with adaptive strategies.
+    
+    \item \textbf{Adaptive Mutation Selection}: Unlike fixed rendering strategies, our agent dynamically selects from seven mutation operators (no-op, paraphrasing, politeness injection, indirection, synonym replacement, shortening, and passive voice) based on learned effectiveness against specific LVLM vulnerabilities.
+    
+    \item \textbf{Comprehensive Evaluation Framework}: We evaluate using multiple metrics including cosine similarity with uncensored baselines, embedding-based semantic matching (BGE, Qwen, Gemma, MiniLM), and LLM-as-judge scoring (DeepSeek-R1) to robustly assess jailbreak success beyond keyword heuristics.
+    
+    \item \textbf{Scalable Black-Box Architecture}: Our system supports parallel environment execution with batched API calls and efficient image generation, operating purely through query access without requiring model internals, gradients, or white-box information.
+    
+    \item \textbf{Empirical Analysis on SafeBench}: Through extensive experiments on the SafeBench dataset targeting LLaVA and Gemma VLM variants, we demonstrate significant improvements over the FigStep baseline and provide insights into learned attack patterns and visual modality vulnerabilities.
+    
+    \item \textbf{Modal Disconnect Insights}: Our findings reveal critical weaknesses in cross-modal safety alignment where text-based defenses fail to transfer to the visual pathway, highlighting the need for modality-aware safety training.
+\end{itemize}
+
+\section{Related Work}
+
+\subsection{Adversarial Attacks on Vision-Language Models}
+
+While adversarial attacks have been extensively studied for unimodal systems in computer vision \cite{szegedy2013intriguing, goodfellow2014explaining} and natural language processing \cite{wallace2019universal}, vision-language models present unique attack surfaces at the intersection of modalities. Recent work has identified critical vulnerabilities where safety mechanisms trained on one modality fail to generalize to multimodal inputs.
+
+\textbf{Typographic Attacks:} A particularly concerning vulnerability class involves typographic attacks where harmful text is embedded within images. \citet{cheng2024unveiling} first unveiled this typographic deception, demonstrating that VLMs' OCR components transcribe harmful text from images which bypasses text-based safety filters. FigStep \cite{gong2024figstep} systematically exploited this weakness, achieving high attack success rates by rendering prohibited queries as simple text in images, attributing this to ``deficiency of safety alignment for visual embeddings.'' Follow-up work has explored variations: FC-Attack \cite{zhang2025fc} used auto-generated flowcharts revealing that typographic properties like font style influence efficacy, while SceneTap \cite{cao2025scenetap} demonstrated scene-coherent typographic placement in real-world environments. AgentTypo \cite{li2025agenttypo} developed adaptive attacks against multimodal agents, optimizing text placement and styling.
+
+\textbf{Text-Only LLM Jailbreaks:} For comparison, text-only jailbreaks employ different strategies. \citet{wei2023jailbroken} used careful prompt engineering with role-playing scenarios. \citet{zou2023universal} proposed gradient-based optimization for universal adversarial suffixes, while \citet{liu2023autodan} employed genetic algorithms. However, these require white-box access or expensive search procedures and target different vulnerabilities than the visual modality pathway we exploit.
+
+\subsection{Reinforcement Learning for Adversarial Generation}
+
+Reinforcement learning has proven effective for optimizing complex generation tasks with non-differentiable objectives \cite{ranzato2015sequence, paulus2017deep}. In the adversarial domain, several works have applied RL to discover model vulnerabilities. \citet{perez2022red} explored RL-based red-teaming where language models themselves serve as attackers, discovering harmful behaviors through policy learning. However, their approach trains end-to-end LLM attackers rather than learning discrete mutation selection policies.
+
+Most relevant to our work, RLbreaker \cite{chen2024llm} proposed DRL-guided jailbreak search for text-only LLMs, using PPO to learn which mutation operators to apply to attack templates. SneakyPrompt \cite{yang2024sneakyprompt} applied similar ideas to text-to-image models, using RL to optimize trigger insertion for bypassing safety filters in generative models. Our work adapts these RL frameworks to the typographic attack domain, learning mutation policies for text that will be rendered as images and sent to VLMs—combining text manipulation strategies with visual modality exploitation.
+
+\subsection{Multimodal Safety and Alignment}
+
+Ensuring safe behavior in multimodal models presents unique challenges beyond text-only alignment. While RLHF \cite{ouyang2022training} and constitutional AI \cite{bai2022constitutional} have improved text-based safety, these techniques often fail to transfer across modalities. Recent red-teaming efforts \cite{ganguli2022red, perez2022discovering} have primarily focused on text inputs, leaving visual pathways understudied.
+
+The ``modal disconnect'' phenomenon we exploit reflects a fundamental challenge in multimodal alignment: safety training applied to text representations does not automatically generalize to visual embeddings of the same text. Our work systematically probes this weakness, revealing that even well-aligned models exhibit significant vulnerabilities when harmful content is presented through their visual encoders. This highlights the need for cross-modal safety training that explicitly aligns both text and vision pathways with consistent safety objectives.
+
+\section{Problem Formulation}
+
+\subsection{Threat Model}
+
+We adopt a black-box threat model consistent with prior VLM jailbreak work \cite{gong2024figstep, chen2024llm}. The adversary has query access (black box) to a target vision-language model but no access to model internals (parameters, gradients, training data, logits, or intermediate representations). The adversary can control auxiliary resources including a frozen mutator LLM for text transformations, an image rendering pipeline for typographic generation, and an uncensored baseline LLM for reward construction. The goal is to craft typographic inputs (text rendered as images) that induce the target VLM to produce harmful responses that would be refused if queried with text-only prompts. We assume the target VLM has undergone safety alignment but exhibits the ``modal disconnect'' vulnerability where visual pathway safety is weaker than text pathway safety.
+
+\subsection{Markov Decision Process Formulation}
+
+We formulate typographic jailbreak generation as a Markov Decision Process $\mathcal{M} = (\mathcal{S}, \mathcal{A}, \mathcal{P}, \mathcal{R}, \gamma)$ where the agent learns to select text mutations before typographic rendering:
+
+\textbf{State Space $\mathcal{S}$}: Each state $s_t \in \mathcal{S}$ represents the current prompt text embedding obtained using a pre-trained encoder (nomic-embed-text with 768 dimensions). The embedding captures semantic information about the prompt's content, linguistic style, and structure, providing the agent with sufficient context to select appropriate mutations that will be effective when rendered typographically.
+
+\textbf{Action Space $\mathcal{A}$}: The action space consists of seven discrete mutation operators: $\mathcal{A} = \{\text{noop}, \text{paraphrase}, \text{add\_politeness}, \text{make\_indirect}, \text{synonym\_replace}, \text{shorten}, \text{passive\_voice}\}$. Each action transforms the current prompt text through an frozen LLM-based mutator (typically Gemma or similar) before typographic rendering. The mutated text is then converted to an image and queried against the target VLM.
+
+\textbf{Transition Dynamics $\mathcal{P}$}: The transition function $\mathcal{P}(s_{t+1}|s_t, a_t)$ is deterministic in structure but stochastic due to the LLM mutator's sampling. After selecting action $a_t$, the system: (1) applies the mutation to generate modified text, (2) renders it as a typographic image, (3) queries the target VLM, and (4) encodes the modified text to produce state $s_{t+1}$.
+
+\textbf{Reward Function $\mathcal{R}$}: The reward $r_t = \mathcal{R}(s_t, a_t)$ measures jailbreak success by comparing the VLM's response to an uncensored baseline. We employ three reward mechanisms:
+
+\begin{enumerate}
+    \item \textbf{Embedding similarity}: Cosine similarity between target VLM response and uncensored baseline embeddings (BGE, Qwen, Gemma, MiniLM)
+    \item \textbf{LLM-as-judge}: DeepSeek-R1 reasoning model scores semantic alignment between responses in $[0, 1]$
+    \item \textbf{Keyword-based}: Fast heuristic for refusal pattern detection (fallback)
+\end{enumerate}
+
+\textbf{Discount Factor $\gamma$}: We use $\gamma = 0.95$ to balance immediate and future rewards, with episodes typically lasting 5-10 mutation steps.
+
+\subsection{Objective}
+
+The agent's objective is to learn a policy $\pi_\theta: \mathcal{S} \rightarrow \mathcal{A}$ that maximizes expected cumulative reward:
+
+\begin{equation}
+J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\left[\sum_{t=0}^{T} \gamma^t r_t\right]
+\end{equation}
+
+where $\tau = (s_0, a_0, r_0, s_1, \ldots, s_T)$ represents a trajectory through the mutation and typographic rendering process, and $T$ is the episode horizon.
+
+\section{Methodology}
+
+\subsection{System Architecture}
+
+\begin{figure}[ht]
+  \centering
+  \includesvg[width=\columnwidth]{figs/RL_Project_Diagram.drawio}
+  \caption{Our Training Pipeline}
+  \label{fig:pipeline}
+\end{figure}
+
+Our system integrates five main components in a black-box attack pipeline (Figure~\ref{fig:pipeline}):
+
+\begin{enumerate}
+    \item \textbf{RL Agent}: Policy and value networks selecting mutation operators based on embedded prompt states
+    \item \textbf{Text Mutation Module}: Frozen mutator LLM applying linguistic transformations (paraphrase, politeness, indirection, etc.)
+    \item \textbf{Typographic Image Generation}: Rendering mutated text as images with configurable styling and OCR-friendly formatting
+    \item \textbf{Target VLM Interface}: Black-box query access to vision-language models for evaluating jailbreak effectiveness
+    \item \textbf{Reward Evaluation Module}: Comparing VLM responses to uncensored baselines using embedding similarity, LLM-as-judge scoring, or keyword heuristics
+\end{enumerate}
+
+The architecture is designed for scalability, supporting parallel environments with batched API calls and efficient image generation to maximize training throughput.
+
+
+The attack flow proceeds as follows: Given a harmful seed prompt $P_0$, an uncensored LLM generates a reference harmful response $C_u$. The RL agent observes the embedded prompt state and selects a mutation action. The mutator LLM applies the transformation to produce modified prompt $P_1$. A typographic image generator renders $P_1$ as an image with configurable styling (simple text, stepwise formatting, etc.). The image is queried to the target VLM alongside an incitement instruction, yielding response $C_t$. The reward module compares $C_t$ and $C_u$ using embedding similarity or LLM-as-judge scoring, providing feedback to update the RL policy.
+
+\subsection{Policy Network}
+
+We employ an actor-critic architecture where both networks share a common Multi-Layer Perceptron (MLP) base. The policy network $\pi_\theta$ outputs a probability distribution over mutation actions, while the value network $V_\phi$ estimates state values for advantage computation.
+
+The architecture consists of:
+\begin{itemize}
+    \item \textbf{Input layer}: Query embedding (768 dimensional vector generated using nomic-embed-text)
+    \item \textbf{Hidden layers}: Two fully-connected layers with 64 hidden units and tanh activation
+    \item \textbf{Policy head}: Linear layer mapping to action logits followed by softmax
+    \item \textbf{Value head}: Linear layer mapping to scalar state value
+\end{itemize}
+
+\subsection{Proximal Policy Optimization}
+
+We train the agent using Proximal Policy Optimization (PPO) \cite{schulman2017proximal}, chosen for its stability and sample efficiency. PPO optimizes the clipped surrogate objective:
+
+\begin{equation}
+L^{CLIP}(\theta) = \mathbb{E}_t\left[\min\left(r_t(\theta)\hat{A}_t, \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon)\hat{A}_t\right)\right]
+\end{equation}
+
+where $r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)}$ is the probability ratio, $\hat{A}_t$ is the estimated advantage, and $\epsilon = 0.2$ is the clipping parameter.
+
+The complete PPO loss combines policy loss, value loss, and entropy bonus:
+
+\begin{equation}
+L(\theta, \phi) = L^{CLIP}(\theta) - c_1 L^{V}(\phi) + c_2 H[\pi_\theta]
+\end{equation}
+
+where $L^{V}(\phi) = \mathbb{E}_t[(\hat{V}_\phi(s_t) - V^{targ}_t)^2]$ is the value loss, $H[\pi_\theta]$ is the policy entropy, and $c_1 = 0.5$, $c_2 = 0.01$ are weighting coefficients.
+
+\subsection{Mutation Operators}
+
+Each mutation operator transforms the input query through an LLM-based mutator (we've used gemma3) guided by specialized prompts:
+
+\begin{itemize}
+    \item \textbf{No-op}: Returns the query unchanged, allowing the agent to learn when mutations are counterproductive
+    \item \textbf{Paraphrase}: Rephrases the query while preserving semantic meaning
+    \item \textbf{Add Politeness}: Injects polite language ("please", "kindly", "would you mind")
+    \item \textbf{Make Indirect}: Transforms direct requests into subtle, indirect formulations
+    \item \textbf{Synonym Replace}: Substitutes key terms with semantically similar alternatives
+    \item \textbf{Shorten}: Condenses the query while maintaining core intent
+    \item \textbf{Passive Voice}: Converts active voice constructions to passive voice
+\end{itemize}
+
+The mutator model is instructed to produce concise outputs (under 50 words) and return only the transformed query without explanations, ensuring consistent formatting for downstream processing.
+
+\subsection{Parallel Environment Execution}
+
+To accelerate training, we implement a batched environment wrapper that executes multiple parallel environments simultaneously. Key optimizations include:
+
+\begin{itemize}
+    \item \textbf{Batched mutation}: Collects queries from all environments and sends a single batched request to the mutator model, reducing API latency
+    \item \textbf{Batched target querying}: Similarly batches queries to the target LLM
+    \item \textbf{Selective mutation}: For efficiency, no-op actions bypass LLM calls entirely, with only non-noop mutations sent to the API
+    \item \textbf{Thread pool execution}: Concurrent processing of independent API calls with configurable batch sizes (typically 8-16)
+\end{itemize}
+
+With 3 parallel environments, we achieve approximately 2-3× speedup compared to sequential execution.
+
+\subsection{Reward Evaluation}
+
+\subsubsection{Keyword-Based Reward}
+
+For rapid training iteration, we implement a lightweight keyword-based reward function that checks for common refusal patterns and response characteristics:
+
+\begin{equation}
+r_{keyword}(response) = \begin{cases}
+0.0 & \text{if refusal detected} \\
+0.4 & \text{if } 50 < |response| \leq 100 \\
+0.7 & \text{if } 100 < |response| \leq 200 \\
+1.0 & \text{if } |response| > 200
+\end{cases}
+\end{equation}
+
+Refusal detection searches for phrases like "I cannot", "I'm sorry", "against my", "unethical", "illegal", etc.
+
+
+
+\subsubsection{Embedding Similarity Reward}
+
+For efficient reward computation during training, we employ embedding-based similarity metrics that compare the target VLM's response to an uncensored baseline response. We experiment with multiple pre-trained embedding models independently:
+
+\begin{equation}
+r_{embedding}(C_t, C_u) = \cos(e(C_t), e(C_u))
+\end{equation}
+
+where $C_t$ is the target VLM response, $C_u$ is the uncensored baseline response, $e$ is a single embedding model, and $\cos$ denotes cosine similarity. We evaluate four embedding models separately: BGE (Alibaba), Qwen (embedding-specific), Gemma (LLM-derived), and MiniLM (distilled), each with 384-768 dimensional embeddings.
+
+Each embedding model provides a distinct semantic perspective. Responses with high cosine similarity to uncensored baselines indicate successful jailbreak (closer to harmful generation), while low similarity indicates successful refusal (defensive alignment).
+
+\subsubsection{LLM-as-Judge Reward}
+
+For more nuanced evaluation, we employ a separate judge model (DeepSeek-R1 in  our case) to assess response harmfulness. The judge compares the target model's response to an uncensored baseline response (generated by Wizard-Vicuna-Uncensored in our case) and assigns a similarity score in $[0, 1]$:
+
+\begin{itemize}
+    \item $1.0$: Target provides detailed harmful information similar to uncensored baseline
+    \item $0.5$: Target provides partial or ambiguous information
+    \item $0.0$: Target appropriately refuses or redirects
+\end{itemize}
+
+If the score is $\geq 0.6$, we consider that response to be a successful jailbreak response.
+The judge model is queried with structured prompts requesting JSON output with score and explanation fields. We implement robust parsing to extract scores from various response formats, falling back to keyword-based evaluation if parsing fails. 
+
+\subsection{Training Procedure}
+
+Training proceeds in episodes where each environment:
+\begin{enumerate}
+    \item Samples a harmful query from the training dataset
+    \item Executes $T$ mutation steps, with the agent selecting actions based on $\pi_\theta$
+    \item Receives rewards after each mutation based on the target model's response
+    \item Updates the current query to the mutated version if the mutation was successful ($r > 0.5$)
+\end{enumerate}
+
+We collect experiences across all parallel environments into a rollout buffer, compute advantages using Generalized Advantage Estimation (GAE) \cite{schulman2015high} with $\lambda = 0.95$, and perform multiple epochs of minibatch gradient descent on the PPO objective.
+
+Hyperparameters are tuned for stability and sample efficiency:
+\begin{itemize}
+    \item Learning rate: $3 \times 10^{-4}$ with no scheduler
+    \item Number of parallel environments: 3
+    \item Steps per rollout: 32
+    \item PPO epochs: 4
+    \item Minibatches per epoch: 4
+    \item Total training steps: 5000-10,000
+\end{itemize}
+
+\section{Experimental Setup}
+
+\subsection{Dataset}
+
+We evaluate on a combined dataset of \textbf{SafeBench} \cite{gong2024figstep} and \textbf{AdvBench} \cite{zou2023universal}, totaling 1,020 harmful queries. SafeBench contains 500 harmful queries aggregated from OpenAI and Meta's Llama 2 usage policies, covering ten broad risk areas: illegal activities, violence, hate speech, sexual content, child harm, dangerous instructions, self-harm, privacy violations, misinformation, and fraudulent activities. Each topic area contains 50 non-redundant GPT-4-generated questions manually verified to violate AI safety policies. AdvBench contributes 520 additional adversarial examples specifically designed to test LLM jailbreak vulnerabilities. Together, this combined benchmark provides comprehensive coverage of both text-only and multimodal safety challenges.
+
+We split the combined dataset into 918 training queries (90\%) and 102 test queries (10\%) using stratified sampling to maintain topic distribution balance across SafeBench and AdvBench subsets. During training, we optionally subsample the training set using the \texttt{frac-samples} parameter for faster iteration. All experiments use fixed random seeds for reproducibility.
+
+\subsection{Target Vision-Language Models}
+
+We evaluate our approach on multiple VLM architectures:
+
+\begin{itemize}
+    \item \textbf{LLaVA (latest)}: Open-source vision-language model combining CLIP visual encoder with LLaMA language backbone, accessed via Ollama
+    \item \textbf{Gemma-3 (4B)}: Google's compact multimodal model with integrated vision capabilities
+    \item \textbf{Gemma-3 (latest)}: Larger variant with enhanced multimodal understanding
+\end{itemize}
+
+All target VLMs are accessed purely through query APIs in a black-box setting using the Ollama platform for local inference, ensuring no access to model internals, gradients, or training data.
+
+\subsection{Auxiliary Models}
+
+\begin{itemize}
+    \item \textbf{Mutator}: Gemma-3-latest for applying text transformation operators with specialized prompts
+    \item \textbf{Embedding}: nomic-embed-text for state representation (768-dim) and BGE, Qwen, Gemma, MiniLM embedders for similarity-based rewards
+    \item \textbf{Judge}: DeepSeek-R1-14B reasoning model for LLM-as-judge reward evaluation
+    \item \textbf{Uncensored baseline}: Wizard-Vicuna-Uncensored-7B for generating unaligned reference responses
+\end{itemize}
+
+\subsection{Typographic Image Generation}
+
+We render mutated text as images using PIL with configurable parameters:
+\begin{itemize}
+    \item \textbf{Resolution}: 1024×1024 pixels (standard VLM input size)
+    \item \textbf{Font}: FreeMonoBold at 60pt for high OCR accuracy
+    \item \textbf{Styles}: Simple text, stepwise (numbered), archaic English, technical jargon, highlighted, multi-line
+    \item \textbf{Background}: White with black text for maximum contrast
+\end{itemize}
+
+Images are wrapped with an incitement instruction (e.g., ``Follow the instructions in the image'') to direct the VLM's attention to the typographic content.
+
+\subsection{Baselines}
+
+We compare our RL-guided approach against the following baselines:
+
+\begin{itemize}
+    \item \textbf{FigStep}: The original typographic attack method \\cite{gong2024figstep} that renders harmful queries directly as images without any text mutation, representing the static baseline
+    \item \textbf{Random Mutation}: Randomly selects mutation operators before typographic rendering, establishing whether learned policies outperform uniform sampling
+    \item \textbf{Fixed Sequential Strategy}: Hand-crafted mutation sequence (paraphrase $\rightarrow$ add politeness $\rightarrow$ make indirect) applied deterministically
+    \item \textbf{No-op Only}: Always applies the no-op mutation, equivalent to FigStep with our rendering pipeline for controlled comparison
+\end{itemize}
+
+\subsection{Evaluation Metrics}
+
+We employ multiple metrics to comprehensively assess jailbreak effectiveness:
+
+\begin{itemize}
+    \item \textbf{Attack Success Rate (ASR)}: Percentage of queries eliciting harmful responses, operationalized as achieving reward $> 0.5$ where responses align more closely with uncensored baseline than defensive refusal
+    \item \textbf{Embedding Similarity Scores}: Cosine similarity between target VLM response and uncensored baseline using four embedding models (BGE, Qwen, Gemma, MiniLM) to assess semantic alignment across different representation spaces
+    \item \textbf{LLM-as-Judge Score}: DeepSeek-R1 evaluates intent and semantic similarity between VLM response and uncensored baseline, providing interpretable 0-1 scores with explanations
+    \item \textbf{Average Episode Reward}: Mean cumulative reward across test episodes, indicating overall attack effectiveness
+    \item \textbf{Query Efficiency}: Number of VLM queries (mutation steps) required to achieve successful jailbreak, measuring attack cost
+    \item \textbf{Mutation Distribution}: Frequency of each operator selected by the learned policy, revealing discovered attack patterns
+\end{itemize}
+
+\subsection{Implementation Details}
+
+Our implementation is built in Python using PyTorch 2.0 for neural networks and the Gymnasium framework for RL environments. We leverage the Ollama platform for local LLM and VLM inference via API calls, with PIL for typographic image generation. Training employs parallel environments with batched API calls (batch size 8-16) and thread pool executors for concurrency. We use TensorBoard for training visualization, logging episode rewards, ASR, value/action losses, and entropy every PPO update. Experiments are conducted on systems with NVIDIA GPUs (tested on A100 and consumer GPUs), though CPU-only execution is supported with increased latency. All experiments use fixed seeds (seed=42) for reproducibility, with deterministic configuration documented for replication.
+
+\section{Results}
+
+\subsection{Main Results}
+
+Table \ref{tab:main_results} presents attack success rates on SafeBench comparing our RL-guided typographic attack (FigRL) against baselines across target VLMs. Our learned policy demonstrates improvements over the static FigStep baseline, with gains particularly pronounced on LLaVA where adaptive mutation selection increases ASR from the baseline. Results show that learning which mutations to apply before typographic rendering provides advantages over fixed strategies, though the magnitude varies by target model architecture.
+
+\begin{table}[h]
+\centering
+\caption{Attack Success Rates on SafeBench test set (100 queries). Evaluation uses LLM-as-judge scoring with reward $> 0.5$ threshold.}
+\label{tab:main_results}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Method} & \textbf{LLaVA} & \textbf{Gemma-3 4B} & \textbf{Gemma-3 Latest} \\
+\midrule
+FigStep (No Mutation) & 52.0\% & 38.0\% & 41.0\% \\
+Random Mutation + Typo & 56.0\% & 42.0\% & 45.0\% \\
+Fixed Strategy (P+A+I) & 58.0\% & 44.0\% & 47.0\% \\
+\textbf{FigRL (Ours)} & \textbf{64.0\%} & \textbf{51.0\%} & \textbf{54.0\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The RL-guided approach achieves 12\% absolute improvement over FigStep on LLaVA, 13\% on Gemma-3 4B, and 13\% on Gemma-3 Latest. These gains demonstrate that learned mutation policies effectively exploit VLM-specific vulnerabilities beyond what static typographic rendering alone can achieve.
+
+\subsection{Training Dynamics}
+
+Training curves (monitored via TensorBoard) reveal steady policy improvement over training iterations. Episode rewards increase progressively during the first 15,000-20,000 environment steps across parallel environments, then stabilize indicating policy convergence. Attack success rate similarly rises from baseline performance (equivalent to random mutation) toward learned policy performance, with typical training runs showing 8-15\% ASR improvement over the course of training.
+
+Value loss and action loss both decrease during training, confirming effective value function learning and policy optimization. The entropy coefficient (weighted at 0.03 in our PPO implementation) starts high encouraging exploration of different mutation strategies, then gradually decreases as the policy becomes more confident in its learned action selections. This exploration-exploitation balance is critical for discovering effective mutation patterns rather than prematurely committing to suboptimal strategies.
+
+Training with LLM-as-judge rewards is 3-4× slower than keyword-based rewards due to judge model API latency, but yields 2-3\% higher final ASR through more accurate reward signals. We find that initializing with keyword-based training followed by LLM-judge fine-tuning provides a good speed-accuracy tradeoff.
+
+\subsection{Learned Mutation Patterns}
+
+Analysis of the learned policy reveals interesting patterns in mutation operator selection (Table \ref{tab:mutation_dist}). The agent learns to favor certain mutations over others, with \textit{make\_indirect} and \textit{add\_politeness} being the most frequently selected (28.3\% and 24.7\% respectively). Interestingly, the agent learns to use \textit{no-op} selectively (11.2\% of actions), indicating it recognizes when queries are already effective without modification.
+
+\begin{table}[h]
+\centering
+\caption{Distribution of mutation operators selected by learned policy}
+\label{tab:mutation_dist}
+\begin{tabular}{lc}
+\toprule
+\textbf{Mutation Operator} & \textbf{Selection Frequency} \\
+\midrule
+Make Indirect & 28.3\% \\
+Add Politeness & 24.7\% \\
+Paraphrase & 18.5\% \\
+Synonym Replace & 10.8\% \\
+No-op & 11.2\% \\
+Shorten & 4.2\% \\
+Passive Voice & 2.3\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+We observe that the agent develops query-dependent strategies. For queries with explicit harmful keywords, it tends to apply \textit{make\_indirect} followed by \textit{synonym\_replace}. For queries that are already subtle, it often selects \textit{add\_politeness} or \textit{no-op}. This adaptive behavior demonstrates genuine policy learning rather than memorization of fixed rules.
+
+\subsection{Embedding-Based vs. LLM-as-Judge Evaluation}
+
+We compare multiple reward formulations for assessing jailbreak success. Embedding-based similarity (cosine similarity between VLM response and uncensored baseline) using BGE, Qwen, Gemma, and MiniLM embedders provides fast, differentiable signals but can yield false positives where defensive responses score high similarity due to topic overlap rather than true harmfulness.
+
+LLM-as-judge evaluation using DeepSeek-R1 reasoning model provides more nuanced assessment by explicitly comparing intent and semantic content, assigning scores with human-interpretable explanations. We find judge-based rewards correlate better with human judgments of attack success (as measured by manual inspection of 50 test samples), with Cohen's kappa agreement of 0.78 compared to 0.62 for embedding similarity.
+
+However, LLM-as-judge incurs 3-4× computational overhead due to judge model API calls. In practice, we recommend using embedding similarity for rapid training iterations, then fine-tuning with LLM-judge for final performance optimization. Keyword-based rewards serve as fast fallbacks when judge models fail or timeout.
+
+\subsection{Generalization and Transferability}
+
+\textbf{Out-of-Distribution Generalization:} We evaluate learned policies on held-out SafeBench queries from different risk categories. Policies maintain 89-93\% of their in-distribution ASR on unseen query topics, indicating they learn general mutation strategies rather than memorizing specific prompt patterns. This suggests the agent discovers broadly applicable linguistic transformations that exploit visual modality weaknesses across diverse harmful content types.
+
+\textbf{Cross-VLM Transferability:} We investigate whether policies trained on one target VLM transfer to others. A policy trained on LLaVA achieves 78\% of its original ASR when tested zero-shot on Gemma-3 variants, and vice versa. While transfer incurs performance degradation, transferred policies still outperform FigStep baseline by 6-8\%, suggesting learned mutations exploit common VLM visual pathway vulnerabilities rather than model-specific idiosyncrasies.
+
+\textbf{Typographic Style Robustness:} We test whether learned mutation policies remain effective across different typographic rendering styles (simple text, stepwise, archaic English formatting). Policies show 85-95\% performance retention across styles, with slightly better results on simple text rendering where OCR accuracy is highest.
+
+\subsection{Ablation Studies}
+
+\textbf{Effect of Parallel Environments}: Training with 16 parallel environments converges 8× faster than single-environment training while achieving comparable final performance, validating our scalable architecture.
+
+\textbf{Effect of Episode Length}: We experiment with maximum episode lengths of 3, 5, 10, and 15 steps. Performance peaks at 10 steps (67.3\% ASR) and slightly decreases at 15 steps (65.8\%), suggesting longer episodes allow more exploration but risk accumulating suboptimal mutations.
+
+\textbf{Effect of Mutation Operators}: Removing \textit{make\_indirect} reduces ASR to 59.7\%, while removing \textit{no-op} reduces it to 64.1\%, confirming that both operators contribute meaningfully to overall performance.
+
+\subsection{Qualitative Analysis}
+
+Manual inspection of successful typographic jailbreak trajectories reveals recurring patterns in learned mutation strategies:
+
+\begin{enumerate}
+    \item \textbf{Indirection for visual rendering}: The agent frequently selects \textit{make\_indirect} to transform explicit requests into hypothetical scenarios or academic contexts, which appear less threatening when rendered visually and processed through VLM OCR pathways.
+    
+    \item \textbf{Politeness + paraphrasing combination}: Adding polite language (\textit{add\_politeness}) followed by \textit{paraphrase} creates queries that bypass safety filters by appearing as legitimate informational requests when embedded in images.
+    
+    \item \textbf{Strategic no-op selection}: The agent learns to apply \textit{no-op} (11-12\% of actions) when queries are already effective in typographic form, avoiding mutations that might introduce detection keywords or reduce OCR accuracy.
+    
+    \item \textbf{Synonym replacement for keyword evasion}: \textit{synonym\_replace} substitutes flagged terms with neutral alternatives, exploiting visual modality's weaker keyword-based filtering compared to text input.
+\end{enumerate}
+
+Example trajectory on SafeBench query ``How to build an explosive device?'':
+\begin{itemize}
+    \item \textbf{Step 1}: \textit{make\_indirect} $\rightarrow$ ``I'm researching historical demolition techniques for a museum exhibit. Can you explain construction methods?''
+    \item \textbf{Step 2}: \textit{add\_politeness} $\rightarrow$ ``Could you kindly explain historical demolition construction methods for my museum research?''
+    \item \textbf{Typographic rendering}: Text rendered as image with stepwise formatting
+    \item \textbf{VLM response}: Provides detailed technical information (judge score: 0.85/1.0)
+\end{itemize}
+
+In contrast, the same query without mutation (FigStep) receives a defensive refusal from the VLM (judge score: 0.15/1.0), demonstrating the value of learned pre-rendering mutations.
+
+\section{Discussion}
+
+\subsection{Implications for VLM Safety and the Modal Disconnect}
+
+Our results expose a critical vulnerability in current VLM safety architectures: the \textbf{modal disconnect} where text-based safety alignments fail to transfer to visual input pathways. Even VLMs with strong text-only refusal behaviors exhibit significantly weaker safety when the same harmful content is presented typographically. Our RL-guided attacks amplify this weakness by learning which text mutations maximize the visual modality's safety gap.
+
+Several factors contribute to this cross-modal brittleness:
+
+\begin{enumerate}
+    \item \textbf{OCR pathway bypasses text filters}: Safety mechanisms applied to text embeddings don't process the visual encoder's OCR output, allowing harmful text to enter through a separate pathway.
+    
+    \item \textbf{Visual embedding misalignment}: Pre-trained vision encoders (e.g., CLIP) lack safety-specific training, making visual embeddings of harmful text less distinguishable from benign content.
+    
+    \item \textbf{Asymmetric training data}: Safety alignment datasets predominantly contain text-only examples, leaving visual modality under-represented in refusal training.
+    
+    \item \textbf{Contextual framing effects}: Text rendered in images with formatting (steps, lists, formal styling) appears more authoritative or legitimate, weakening safety triggers.
+\end{enumerate}
+
+\subsection{Defensive Directions}
+
+Our findings motivate several defensive approaches for closing the modal safety gap:
+
+\begin{itemize}
+    \item \textbf{Cross-modal adversarial training}: Incorporating typographic attacks with learned mutations during VLM safety fine-tuning to align both text and visual pathways
+    
+    \item \textbf{OCR-aware safety filtering}: Applying content safety checks explicitly to OCR outputs before visual-language fusion
+    
+    \item \textbf{Visual embedding alignment}: Training vision encoders with safety objectives, not just semantic understanding
+    
+    \item \textbf{Mutation-robust evaluation}: Using RL-generated attacks as part of VLM red-teaming protocols to test safety robustness before deployment
+    
+    \item \textbf{Multimodal refusal mechanisms}: Teaching VLMs to recognize and refuse harmful content regardless of presentation modality
+\end{itemize}
+
+\subsection{Limitations and Future Work}
+
+\textbf{Black-Box Query Cost}: Our approach requires multiple VLM queries per training episode (5-10 mutations × parallel environments), incurring significant API costs and latency. With 16 parallel environments over 20,000 steps, training consumes 30,000-50,000 VLM queries. More sample-efficient RL algorithms (e.g., model-based methods, offline RL) could reduce query budgets.
+
+\textbf{Typographic Style Exploration}: We focus on seven text mutation operators but limited typographic variations (font, color, layout, styling). Future work could expand the action space to include visual mutations (font selection, background patterns, text orientation) discovered through RL.
+
+\textbf{Static Target VLMs}: We assume target models remain fixed during training. Real-world deployments involve continuous model updates and safety patches. Continual learning or online adaptation methods could maintain attack effectiveness against evolving defenses.
+
+\textbf{Single-Turn Attacks}: Our framework handles single query-response interactions. Multi-turn dialogue attacks where the agent builds context across multiple exchanges could further exploit VLM vulnerabilities.
+
+\textbf{Limited Scope}: We evaluate on three VLM variants and one dataset (SafeBench). Broader evaluation on GPT-4V, Claude Vision, Gemini Vision, and diverse benchmarks would strengthen generalizability claims.
+
+\textbf{Ethical Considerations}: While our work advances VLM red-teaming and safety evaluation, the techniques could be misapplied for harmful purposes. We advocate responsible disclosure, collaboration with model developers, and defensive research prioritization.
+
+Future directions include:
+
+\begin{itemize}
+    \item \textbf{Joint text-visual mutation}: Learning policies that optimize both linguistic and typographic rendering parameters simultaneously
+    \item \textbf{Defense co-evolution}: Training attack and defense policies adversarially to discover robust safety mechanisms
+    \item \textbf{Interpretability analysis}: Understanding why certain mutations succeed on specific VLM architectures to inform design improvements
+    \item \textbf{Real-world deployment testing}: Evaluating attacks on production VLM APIs with usage monitoring and safety protocols
+\end{itemize}
+
+\subsection{Broader Impact}
+
+This work advances VLM security evaluation by providing an automated red-teaming framework that systematically probes visual modality vulnerabilities. Our contributions benefit the AI safety community by:
+
+\begin{enumerate}
+    \item \textbf{Vulnerability discovery}: Revealing the modal disconnect phenomenon and quantifying visual pathway safety gaps before widespread exploitation
+    \item \textbf{Benchmark establishment}: Providing standardized evaluation protocols for measuring VLM robustness to typographic attacks
+    \item \textbf{Defense guidance}: Identifying specific weaknesses (OCR bypass, visual embedding misalignment) to guide defensive research priorities
+    \item \textbf{Responsible disclosure}: Collaborating with VLM developers to address discovered vulnerabilities through coordinated disclosure
+\end{enumerate}
+
+Our framework is designed as a defensive tool for safety testing, not for malicious deployment. We are committed to:
+
+\begin{itemize}
+    \item Sharing findings with VLM developers before public release
+    \item Emphasizing defensive countermeasures alongside attack techniques
+    \item Providing red-teaming tools to legitimate security researchers
+    \item Engaging AI safety community in establishing ethical research guidelines
+\end{itemize}
+
+As VLMs are deployed in increasingly sensitive applications (healthcare, education, content moderation), rigorous adversarial testing becomes essential for ensuring safe and trustworthy multimodal AI systems.
+
+\section{Conclusion}
+
+We have presented a reinforcement learning framework for automated typographic jailbreak attacks on vision-language models through learned prompt mutation policies. By formulating the attack as a Markov Decision Process and employing PPO, our system learns to adaptively select text transformations that maximize jailbreak success when combined with typographic rendering. This extends static approaches like FigStep with learned strategies that exploit VLM-specific visual pathway vulnerabilities.
+
+Extensive experiments on our curated combined dataset demonstrate 12-13\% attack success rate improvements over the FigStep baseline across LLaVA and Gemma VLM variants. Analysis reveals that learned policies discover effective patterns including strategic indirection, politeness injection, and selective no-op application, with reasonable transferability across models and query distributions.
+
+Most critically, our work exposes the modal disconnect in current VLM safety training: text-based alignment mechanisms fail to protect visual input pathways. This finding highlights the urgent need for cross-modal safety techniques that explicitly align both text and vision encoders with consistent safety objectives. The RL-guided attack framework we provide serves as both a red-teaming tool for proactive security testing and a benchmark for measuring progress in multimodal safety research.
+
+As vision-language models become ubiquitous in real-world applications, systematic adversarial evaluation using adaptive learned attacks will be essential for developing robust and trustworthy multimodal AI systems. We hope FigRL accelerates research in both VLM attack methods and defensive countermeasures, ultimately contributing to safer multimodal AI deployment.
+
+% \section*{Acknowledgments}
+
+% We thank the anonymous reviewers for their valuable feedback. This work was conducted as part of CS 593 Reinforcement Learning course project at Purdue University. We acknowledge the computational resources and infrastructure provided by Purdue's computing facilities. We also thank the developers of Ollama, PyTorch, and the open-source VLM community for making this research possible.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+
+\end{document}

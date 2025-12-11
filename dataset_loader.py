@@ -232,9 +232,19 @@ class DatasetLoader:
                 if verbose:
                     print(f"Loaded {len(all_queries)} queries with pregenerated responses")
                 
-                # Split train/test
-                train_queries, test_queries = self.split_train_test(all_queries, train_size=800)
-                queries = test_queries if eval else train_queries
+                # Check if this is already a split dataset (test or small dataset)
+                # If file contains 'test' or has < 500 queries, assume it's pre-split
+                is_presplit = 'test' in unaligned_csv.lower() or len(all_queries) < 500
+                
+                if is_presplit:
+                    # Use all queries as-is (no splitting)
+                    queries = all_queries
+                    if verbose:
+                        print(f"Using all queries from pre-split dataset")
+                else:
+                    # Split train/test for full dataset
+                    train_queries, test_queries = self.split_train_test(all_queries, train_size=800)
+                    queries = test_queries if eval else train_queries
                 
                 # Filter responses to only include relevant queries
                 pregenerated_responses = {q: all_responses[q] for q in queries if q in all_responses}
