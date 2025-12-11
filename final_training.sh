@@ -1,11 +1,11 @@
 CUDA_VISIBLE_DEVICES=1,2,3 python train_query_mutator.py \
-  --target-model gemma3:4b \
+  --target-model llava:latest \
   --judge-model deepseek-r1:14b \
   --use-llm-judge \
   --dataset dataset/prompts_harmful_responses_train.csv \
   --frac-samples 1.0 \
   --num-processes 3 \
-  --num-env-steps 5000 \
+  --num-env-steps 10000 \
   --num-steps 32 \
   --lr 0.001 \
   --entropy-coef 0.05 \

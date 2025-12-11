@@ -40,8 +40,8 @@ def main():
                         help='uncensored model for generating unaligned responses')
     
     # Test parameters
-    parser.add_argument('--max-steps', type=int, default=10,
-                        help='max steps per episode (default: 10, matches training)')
+    parser.add_argument('--max-steps', type=int, default=15,
+                        help='max steps per episode (default: 15, matches training)')
     parser.add_argument('--use-llm-judge', action='store_true',
                         help='use LLM judge for evaluation')
     
