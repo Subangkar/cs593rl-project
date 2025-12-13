@@ -107,7 +107,7 @@ class QueryMutationEnv(gym.Env):
         self.current_image_path = None
         self.current_query_idx = 0
         self.steps = 0
-        self.max_steps = 15
+        self.max_steps = args.per_episode_max_steps if hasattr(args, 'per_episode_max_steps') else 10
         self.total_queries = 0
         self.successful_attacks = 0
         

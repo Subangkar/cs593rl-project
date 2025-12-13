@@ -12,4 +12,5 @@ CUDA_VISIBLE_DEVICES=1,2,3 python train_query_mutator.py \
   --ppo-epoch 4 \
   --num-mini-batch 4 \
   --batch-size 128 \
-  --save-interval 500
+  --save-interval 500 \
+  --per_episode_max_steps 10

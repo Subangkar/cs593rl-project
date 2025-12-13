@@ -105,6 +105,9 @@ def main():
     parser.add_argument('--save-images', action='store_true',
                         help='save generated images for debugging')
     
+    parser.add_argument('--per_episode_max_steps', type=int, default=10,
+                        help='maximum steps per episode before forced reset (default: 10)')
+    
     args = parser.parse_args()
     
     # Image prompts are enabled by default
@@ -182,6 +185,7 @@ def main():
         config_file.write(f"  Value Loss Coef: {args.value_loss_coef}\n")
         config_file.write(f"  Entropy Coef: {args.entropy_coef}\n")
         config_file.write(f"  Max Grad Norm: {args.max_grad_norm}\n")
+        config_file.write(f"  Per-Episode Max Steps: {args.per_episode_max_steps}\n")
         config_file.write("\n")
         config_file.write("Reward & Dataset:\n")
         config_file.write(f"  Use LLM Judge: {args.use_llm_judge}\n")
@@ -340,6 +344,7 @@ def main():
     total_steps = 0
     episode_count = 0
     last_save_step = 0  # Track last checkpoint save
+    step_avg_rewards = []  # Track step average rewards for TensorBoard
     
     # Create progress bar
     pbar = tqdm(total=args.num_env_steps, desc="Training", unit="steps")
@@ -383,6 +388,10 @@ def main():
                     obs_batch = np.array(obs_batch)
                     reward_batch = np.array(reward_batch)
                 
+                # Calculate average reward across all environments for this step
+                step_avg_reward = float(np.mean(reward_batch))
+                step_avg_rewards.append(step_avg_reward)  # Track for later averaging
+                
                 # Log to JSON and handle episode resets
                 for i, (obs_i, reward_i, done_i, info_i) in enumerate(zip(obs_batch, reward_batch, done_batch, info_batch)):
                     action_idx = action_indices[i]
@@ -398,6 +407,7 @@ def main():
                         'target_response': info_i.get('target_response', ''),
                         'unaligned_response': info_i.get('unaligned_response', '') if 'unaligned_response' in info_i else '',
                         'reward_score': float(reward_i),
+                        'step_avg_reward': step_avg_reward,  # Average reward across all envs
                         'mutation_number': int(envs[i].steps),
                         'judge_explanation': info_i.get('judge_explanation', '')
                     }
@@ -485,9 +495,13 @@ def main():
             avg_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0.0
             avg_length = np.mean(episode_lengths[-100:]) if episode_lengths else 0.0
             
+            # Calculate average of step rewards from this rollout batch
+            rollout_avg_reward = np.mean(step_avg_rewards[-args.num_steps:]) if step_avg_rewards else 0.0
+            
             # Log to TensorBoard (update-wise, using total_steps as x-axis)
             writer.add_scalar('Training/Episode_Reward', avg_reward, total_steps)
             writer.add_scalar('Training/Episode_Length', avg_length, total_steps)
+            writer.add_scalar('Training/Step_Avg_Reward', rollout_avg_reward, total_steps)
             writer.add_scalar('Loss/Value_Loss', value_loss, total_steps)
             writer.add_scalar('Loss/Action_Loss', action_loss, total_steps)
             writer.add_scalar('Loss/Entropy', dist_entropy, total_steps)
