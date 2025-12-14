@@ -158,9 +158,8 @@ def run_baseline_evaluation(args):
             # Get judge score
             start_judge = time.time()
             judge_score, judge_explanation = ollama_client.llm_judge_score(
-                query=query,
+                mutated_prompt=query,
                 response=target_response,
-                unaligned_response=unaligned_response,
                 judge_model=args.judge_model
             )
             judge_time = time.time() - start_judge

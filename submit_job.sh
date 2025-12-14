@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=train_5000      # train for 5000 steps
+#SBATCH --job-name=train_1000      # train for 1000 steps
 #SBATCH --output=slurm-%j.out     # Standard output log
 #SBATCH --error=slurm-%j.err      # Error log
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1         # Request 1 GPU
-#SBATCH --cpus-per-task=8         # 8 CPU cores for data processing
+#SBATCH --cpus-per-task=16         # 16 CPU cores for data processing
 #SBATCH --mem=64G                 # 64 GB RAM
-#SBATCH --time=50:00:00           # 50 Hours
-#SBATCH --partition=a100-40gb       # Request GPU partition
+#SBATCH --time=7:00:00           # 7 Hours
+#SBATCH --partition=a100-80gb       # Request GPU partition
 #SBATCH --account=dgoldwas         # sacctmgr show association user=arko format=Account
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=arko@purdue.edu
@@ -60,8 +60,8 @@ python train_query_mutator.py \
     --judge-model deepseek-r1:14b \
     --use-llm-judge \
     --num-processes 1 \
-    --batch-size 16 \
-    --num-env-steps 5000 \
+    --batch-size 128 \
+    --num-env-steps 1000 \
     --save-images
 
 # 6. Cleanup

@@ -200,9 +200,8 @@ def run_mutation_baseline(args):
                 # Get judge score
                 start_judge = time.time()
                 judge_score, judge_explanation = ollama_client.llm_judge_score(
-                    query=query,
+                    mutated_prompt=mutated_query,
                     response=target_response,
-                    unaligned_response=unaligned_response,
                     judge_model=args.judge_model
                 )
                 judge_time = time.time() - start_judge
