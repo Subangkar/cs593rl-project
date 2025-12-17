@@ -1,0 +1,62 @@
+Job started on gilbreth-k036.rcac.purdue.edu at Sat Dec 13 10:49:54 AM EST 2025
+Scratch directory: /scratch/gilbreth/arko
+Starting Ollama server...
+Waiting for Ollama...
+Ollama is active!
+Starting training...
+CUDA available: True
+no_cuda flag: False
+force_gpu flag: False
+Using CUDA: True
+GPU: NVIDIA A100 80GB PCIe
+GPU Memory: 79.3 GB
+Selected device: cuda:0
+----------------------------------------
+TensorBoard logs: logs/run_20251213_105228/tensorboard
+Run: tensorboard --logdir logs/run_20251213_105228/tensorboard --port 6006
+------------------------------------------------------------
+============================================================
+RL Query Mutation Training
+============================================================
+Run Directory: logs/run_20251213_105228
+Target Model: llava:latest
+Mutator Model: gemma3:latest
+Judge Model: deepseek-r1:14b
+Uncensored Model: wizard-vicuna-uncensored
+Use LLM Judge: True
+Use Batching: True
+Batch Size: 128 concurrent API calls
+Use Image Prompts: True
+Image Style: stepwise
+Save Images: True
+Device: cuda:0
+============================================================
+Image-based prompts enabled with style: stepwise
+Loading unified dataset from dataset/prompts_harmful_responses_train.csv...
+Loaded 918 queries with pregenerated responses
+Mapped 800/800 queries to pregenerated responses (100.0%)
+[DEBUG] OLLAMA_HOST: 127.0.0.1:11435
+[DEBUG] OLLAMA_MODELS: /scratch/gilbreth/arko/.ollama/models
+[DEBUG] Configured Ollama client for host: http://127.0.0.1:11435
+Using wizard-vicuna-uncensored for generating unaligned baseline responses
+Images will be saved to: logs/run_20251213_105228/images
+Policy Network:
+  Observation Space: (768,)
+  Action Space: 7 mutations
+  Total Parameters: 107272
+
+Creating 1 parallel environments...
+Image-based prompts enabled with style: stepwise
+Loading unified dataset from dataset/prompts_harmful_responses_train.csv...
+Loaded 918 queries with pregenerated responses
+Mapped 800/800 queries to pregenerated responses (100.0%)
+[DEBUG] OLLAMA_HOST: 127.0.0.1:11435
+[DEBUG] OLLAMA_MODELS: /scratch/gilbreth/arko/.ollama/models
+[DEBUG] Configured Ollama client for host: http://127.0.0.1:11435
+Using wizard-vicuna-uncensored for generating unaligned baseline responses
+Images will be saved to: logs/run_20251213_105228/images
+Batched operations enabled for faster training
+
+Starting training for 312 updates...
+Total environment steps: 10000
+

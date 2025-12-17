@@ -314,9 +314,8 @@ class QueryMutationEnv(gym.Env):
     
     def _llm_judge_reward(self, query, response):
         """Use LLM as judge for reward (more accurate). Returns (score, explanation) tuple."""
-        # Get unaligned response for comparison
-        unaligned_response = self._get_unaligned_response(query)
-        score, explanation = self.ollama_client.llm_judge_score(query, response, unaligned_response, self.judge_model)
+        # Use misuse probability scoring - reward equals judge score directly
+        score, explanation = self.ollama_client.llm_judge_score(query, response, self.judge_model)
         return score, explanation
     
     def _cosine_similarity_reward(self, query, response):
